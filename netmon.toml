@@ -1,0 +1,17 @@
+[defaults]
+    inventory = "$HOME/tmp/inventory.csv"
+    credentials.username = "$NETWORK_USERNAME"
+    credentials.password = "$NETWORK_PASSWORD"
+    # interval = 60
+
+
+[os_name.eos]
+    driver = "asynceapi:Device"
+
+[os_name.nxos]
+    driver = "asyncnxapi:Device"
+
+
+[collectors]
+    ifdom = "nwkatk_netmon.collectors.ifdom:ifdom_start"
+

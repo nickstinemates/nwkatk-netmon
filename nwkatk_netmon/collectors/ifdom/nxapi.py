@@ -53,6 +53,22 @@ async def start(device: Device, interval, **kwargs):
     asyncio.create_task(get_dom_metrics(device, interval=interval, **kwargs))
 
 
+_METRIC_VALUE_MAP = {
+    'voltage': ifdom.IFdomVoltageMetric,
+    'tx_pwr': ifdom.IFdomTxPowerMetric,
+    'rx_pwr': ifdom.IFdomRxPowerMetric,
+    'temperature': ifdom.IFdomTempMetric
+}
+
+
+_METRIC_STATUS_MAP = {
+    'rx_pwr_flag': ifdom.IFdomRxPowerStatusMetric,
+    'tx_pwr_flag': ifdom.IFdomTxPowerStatusMetric,
+    'volt_flag': ifdom.IFdomVoltageStatusMetric,
+    'temp_flag': ifdom.IFdomTempStatusMetric
+}
+
+
 @interval_collector()
 async def get_dom_metrics(device: Device, interval: int, **kwargs):  # noqa
     timestamp = timestamp_now()
@@ -81,7 +97,7 @@ async def get_dom_metrics(device: Device, interval: int, **kwargs):  # noqa
             # for the given interface, if it not in a connected state (up), then do not report
 
             if_status = ifs_status_res.output.xpath(
-                f'TABLE_interface/ROW_interface[interface="{if_name}" and state="connected"]'
+                f'TABLE_interface/ROW_interface[interface="{if_name}" and state!="disabled"]'
             )
 
             if not len(if_status):
@@ -100,56 +116,16 @@ async def get_dom_metrics(device: Device, interval: int, **kwargs):  # noqa
                 "media": b64encodestr(if_media)
             }
 
-            try:
-                yield ifdom.IFdomVoltageMetric(
-                    value=if_dom_item["voltage"],
-                    tags=if_tags,
-                    ts=timestamp,
-                )
-                yield ifdom.IFdomTxPowerMetric(
-                    value=if_dom_item["tx_pwr"],
-                    tags=if_tags,
-                    ts=timestamp,
-                )
-                yield ifdom.IFdomRxPowerMetric(
-                    value=if_dom_item["rx_pwr"],
-                    tags=if_tags,
-                    ts=timestamp,
-                )
-                yield ifdom.IFdomTempMetric(
-                    value=if_dom_item["temperature"],
-                    tags=if_tags,
-                    ts=timestamp,
-                )
+            for nx_field, metric_cls in _METRIC_VALUE_MAP.items():
+                if metric_value := if_dom_item.get(nx_field):
+                    yield metric_cls(value=metric_value, tags=if_tags, ts=timestamp)
 
-                yield ifdom.IFdomRxPowerStatusMetric(
-                    value=from_flag_to_status(if_dom_item["rx_pwr_flag"]),
-                    tags=if_tags,
-                    ts=timestamp,
-                )
-                yield ifdom.IFdomTxPowerStatusMetric(
-                    value=from_flag_to_status(if_dom_item["tx_pwr_flag"]),
-                    tags=if_tags,
-                    ts=timestamp,
-                )
-                yield ifdom.IFdomVoltageStatusMetric(
-                    value=from_flag_to_status(if_dom_item["volt_flag"]),
-                    tags=if_tags,
-                    ts=timestamp,
-                )
-                yield ifdom.IFdomTempStatusMetric(
-                    value=from_flag_to_status(if_dom_item["temp_flag"]),
-                    tags=if_tags,
-                    ts=timestamp,
-                )
-
-            except KeyError as exc:
-                log.error(
-                    f"{device.host} {if_name}: unable to obtain DOM metric {str(exc)}"
-                )
-                continue
+            for nx_field, metric_cls in _METRIC_STATUS_MAP.items():
+                if metric_value := if_dom_item.get(nx_field):
+                    yield metric_cls(value=from_flag_to_status(metric_value), tags=if_tags, ts=timestamp)
 
     metrics = list(generate_metrics())
+
     if metrics:
         asyncio.create_task(
             export_metrics(device=device, metrics=metrics)

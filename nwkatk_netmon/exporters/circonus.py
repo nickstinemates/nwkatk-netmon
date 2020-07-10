@@ -69,5 +69,7 @@ async def export_metrics(device, metrics):
 
     try:
         await to_circonus()
-    except httpx.Timeout:
-        log.error(f"{device.host}: Unable to send metrics to Circonus due to timeout")
+
+    except Exception as exc:  # noqa
+        exc_name = exc.__class__.__name__
+        log.error(f"{device.host}: Unable to send metrics to Circonus: {exc_name}")

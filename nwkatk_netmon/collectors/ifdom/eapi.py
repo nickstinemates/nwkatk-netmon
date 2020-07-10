@@ -126,16 +126,6 @@ def make_if_metrics(if_name, if_dom_data, if_desc):
     )
 
 
-def threshold_inside(value, thresholds):
-    if thresholds["lowAlarm"] >= value >= thresholds["highAlarm"]:
-        return 2
-
-    if thresholds["lowWarn"] >= value >= thresholds["highWarn"]:
-        return 1
-
-    return 0
-
-
 def threshold_outside(value, thresholds):
     if value <= thresholds["lowAlarm"] or value >= thresholds["highAlarm"]:
         return 2

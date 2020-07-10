@@ -29,7 +29,7 @@ with open("README.md", "r") as fh:
 setup(
     name=package_name,
     version=package_version,
-    description="Network Interface DOM monitoring",
+    description="Network Automation Monitoring Toolkit",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Jeremy Schulman",

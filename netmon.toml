@@ -1,17 +1,23 @@
 [defaults]
+    # interval = 60                                         ; the default collection interval
     inventory = "$HOME/tmp/inventory.csv"
     credentials.username = "$NETWORK_USERNAME"
     credentials.password = "$NETWORK_PASSWORD"
-    # interval = 60
 
+[collectors]
+    # <name> = <entry-point>
+    ifdom = "nwkatk_netmon.collectors.ifdom:ifdom_start"
+
+#[collector_configs.ifdom]
+# arbitraty collector configuration passed along for specifically named collector
+#    key1 = "value1"
+#    ... etc ....
 
 [os_name.eos]
     driver = "asynceapi:Device"
+    packages = ["nwkatk_netmon.collectors.ifdom.eapi"]
 
 [os_name.nxos]
     driver = "asyncnxapi:Device"
-
-
-[collectors]
-    ifdom = "nwkatk_netmon.collectors.ifdom:ifdom_start"
+    packages = ["nwkatk_netmon.collectors.ifdom.nxapi"]
 

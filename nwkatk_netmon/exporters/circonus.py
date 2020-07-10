@@ -1,3 +1,17 @@
+#     Copyright 2020, Jeremy Schulman
+#
+#     Licensed under the Apache License, Version 2.0 (the "License");
+#     you may not use this file except in compliance with the License.
+#     You may obtain a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing, software
+#     distributed under the License is distributed on an "AS IS" BASIS,
+#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#     See the License for the specific language governing permissions and
+#     limitations under the License.
+
 import os
 import asyncio
 from functools import lru_cache
@@ -6,7 +20,7 @@ from itertools import chain
 import httpx
 from tenacity import retry, wait_exponential
 
-from nwkatk_netmon.collectors import Metric
+from nwkatk_netmon import Metric
 from nwkatk_netmon.log import log
 
 circonus_sem4 = asyncio.Semaphore(100)
@@ -17,7 +31,7 @@ def circonus_url():
     return os.environ["CIRCONUS_URL"]
 
 
-def make_circonus_metric(device_tags, metric_prefix: str, metric: Metric):
+def make_circonus_metric(device_tags, metric: Metric):
     all_tags = chain(device_tags.items(), metric.tags.items())
 
     def to_str(value):
@@ -28,19 +42,18 @@ def make_circonus_metric(device_tags, metric_prefix: str, metric: Metric):
 
     stream_tags = ",".join(f"{key}:{to_str(value)}" for key, value in all_tags)
 
-    name = f"{metric_prefix}_{metric.name}|ST[{stream_tags}]"
+    name = f"{metric.name}|ST[{stream_tags}]"
     value = metric.value
     return name, value
 
 
-async def export_metrics(device, metric_prefix, metrics):
-    log.debug(f"{device.host}: Exporting {len(metrics)} {metric_prefix} metrics")
+async def export_metrics(device, metrics):
+    log.debug(f"{device.host}: Exporting {len(metrics)} metrics")
 
     post_url = circonus_url()
     post_data = dict(
         make_circonus_metric(
             device_tags=device.private["tags"],
-            metric_prefix=metric_prefix,
             metric=metric,
         )
         for metric in metrics

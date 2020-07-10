@@ -1,14 +1,24 @@
+#     Copyright 2020, Jeremy Schulman
+#
+#     Licensed under the Apache License, Version 2.0 (the "License");
+#     you may not use this file except in compliance with the License.
+#     You may obtain a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing, software
+#     distributed under the License is distributed on an "AS IS" BASIS,
+#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#     See the License for the specific language governing permissions and
+#     limitations under the License.
+
 import asyncio
 import functools
-from collections import namedtuple
 from base64 import encodebytes
 
 from nwkatk_netmon.log import log
 
-__all__ = ["Metric", "interval_collector", "b64encodestr"]
-
-
-Metric = namedtuple("Metric", ["name", "value", "tags"])
+__all__ = ["interval_collector", "b64encodestr"]
 
 
 def interval_collector():
@@ -43,23 +53,6 @@ def interval_collector():
         return wrapped
 
     return decorate
-
-
-# def dead():
-# async def next_interval():
-#     log.info(f"{hostname}: Waiting {interval}s before next collection")
-#     await asyncio.sleep(interval)
-#     asyncio.create_task(get_dom_metrics(device, interval))
-#
-# asyncio.create_task(next_interval())
-
-# option-A
-# next_collect = asyncio.create_task(asyncio.sleep(interval))
-# next_collect.add_done_callback(lambda _fut: asyncio.create_task(get_dom_metrics(device, interval)))
-
-# option-B
-# await asyncio.sleep(collect_interval)
-# asyncio.create_task(get_dom_metrics(device, interval))
 
 
 def b64encodestr(str_value):

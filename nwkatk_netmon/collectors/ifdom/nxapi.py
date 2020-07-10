@@ -1,3 +1,17 @@
+#     Copyright 2020, Jeremy Schulman
+#
+#     Licensed under the Apache License, Version 2.0 (the "License");
+#     you may not use this file except in compliance with the License.
+#     You may obtain a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing, software
+#     distributed under the License is distributed on an "AS IS" BASIS,
+#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#     See the License for the specific language governing permissions and
+#     limitations under the License.
+
 # -----------------------------------------------------------------------------
 # System Imports
 # -----------------------------------------------------------------------------
@@ -16,13 +30,14 @@ from asyncnxapi import Device
 # Private Imports
 # -----------------------------------------------------------------------------
 
-from nwkatk_netmon.collectors import Metric, b64encodestr, interval_collector
-from nwkatk_netmon.collectors.ifdom import ifdom_start
+from nwkatk_netmon import timestamp_now
+from nwkatk_netmon.collectors import b64encodestr, interval_collector
+from nwkatk_netmon.collectors import ifdom
 from nwkatk_netmon.exporters.circonus import export_metrics
 from nwkatk_netmon.log import log
 
 
-@ifdom_start.register
+@ifdom.ifdom_start.register
 async def start(device: Device, interval, **kwargs):
     log.info(f"{device.host}: Connecting to NX-OS device")
 
@@ -40,87 +55,104 @@ async def start(device: Device, interval, **kwargs):
 
 @interval_collector()
 async def get_dom_metrics(device: Device, interval: int, **kwargs):  # noqa
-    log.info(f"{device.host}: Process DOM metrics")
-    ifs_status_res, ifs_dom_res = await device.exec(
-        ["show interface status", "show interface transceiver details"]
+    timestamp = timestamp_now()
+
+    log.info(f"{device.host}: Process DOM metrics ts={timestamp}")
+
+    ifs_dom_res, ifs_status_res = await device.exec(
+        ["show interface transceiver details", "show interface status"]
     )
 
-    def generate_ifstatus():
-        ifs_status_el = ifs_status_res.output.xpath(".//ROW_interface")
-        res_dict = dict()
-        for ele in ifs_status_el:
-            as_dict = row_to_dict(ele)
-            if_name = as_dict.pop("interface")
-            res_dict[if_name] = as_dict
+    # find all interfaces that have a transceiver present, and the transceiver has a temperature value - guard against
+    # non-optical transceivers.
 
-        return res_dict
-
-    ifs_status = generate_ifstatus()
-
-    ifs_dom_el = ifs_dom_res.output.xpath('.//ROW_interface[sfp="present"]')
-
-    def ok_for_dom(_if_name, if_data):
-        if ifs_status[_if_name]["state"] != "connected":
-            return False
-
-        if "temperature" not in if_data:
-            return False
-
-        return True
+    ifs_dom_data = [
+        row_to_dict(ele)
+        for ele in ifs_dom_res.output.xpath(
+            './/ROW_interface[sfp="present" and temperature]'
+        )
+    ]
 
     def generate_metrics():
-        for ele in ifs_dom_el:
-            as_dict = row_to_dict(ele)
-            if_name = as_dict["interface"]
 
-            if not ok_for_dom(if_name, as_dict):
+        for if_dom_item in ifs_dom_data:
+            if_name = if_dom_item["interface"]
+
+            # for the given interface, if it not in a connected state (up), then do not report
+
+            if_status = ifs_status_res.output.xpath(
+                f'TABLE_interface/ROW_interface[interface="{if_name}" and state="connected"]'
+            )
+
+            if not len(if_status):
                 continue
+
+            # obtain the interface description value; handle case if there is none configured.
+
+            if_desc = (if_status[0].findtext("name") or "").strip()
+            if_media = (if_dom_item["type"] or if_dom_item["partnum"]).strip()
+
+            # all of the metrics will share the same interface tags
 
             if_tags = {
                 "if_name": if_name,
-                "if_desc": b64encodestr(ifs_status[if_name]["name"].strip()),
-                "media": b64encodestr((as_dict["type"] or as_dict["partnum"]).strip()),
+                "if_desc": b64encodestr(if_desc),
+                "media": b64encodestr(if_media)
             }
 
             try:
-                yield Metric(
-                    name="voltage", value=float(as_dict["voltage"]), tags=if_tags
+                yield ifdom.IFdomVoltageMetric(
+                    value=if_dom_item["voltage"],
+                    tags=if_tags,
+                    ts=timestamp,
                 )
-                yield Metric(
-                    name="txpower", value=float(as_dict["tx_pwr"]), tags=if_tags
+                yield ifdom.IFdomTxPowerMetric(
+                    value=if_dom_item["tx_pwr"],
+                    tags=if_tags,
+                    ts=timestamp,
                 )
-                yield Metric(
-                    name="rxpower", value=float(as_dict["rx_pwr"]), tags=if_tags
+                yield ifdom.IFdomRxPowerMetric(
+                    value=if_dom_item["rx_pwr"],
+                    tags=if_tags,
+                    ts=timestamp,
                 )
-                yield Metric(
-                    name="temp", value=float(as_dict["temperature"]), tags=if_tags
+                yield ifdom.IFdomTempMetric(
+                    value=if_dom_item["temperature"],
+                    tags=if_tags,
+                    ts=timestamp,
                 )
 
-                yield Metric(
-                    "rxpower_status",
-                    from_flag_to_status(as_dict["rx_pwr_flag"]),
-                    if_tags,
+                yield ifdom.IFdomRxPowerStatusMetric(
+                    value=from_flag_to_status(if_dom_item["rx_pwr_flag"]),
+                    tags=if_tags,
+                    ts=timestamp,
                 )
-                yield Metric(
-                    "txpower_status",
-                    from_flag_to_status(as_dict["tx_pwr_flag"]),
-                    if_tags,
+                yield ifdom.IFdomTxPowerStatusMetric(
+                    value=from_flag_to_status(if_dom_item["tx_pwr_flag"]),
+                    tags=if_tags,
+                    ts=timestamp,
                 )
-                yield Metric(
-                    "voltage_status", from_flag_to_status(as_dict["volt_flag"]), if_tags
+                yield ifdom.IFdomVoltageStatusMetric(
+                    value=from_flag_to_status(if_dom_item["volt_flag"]),
+                    tags=if_tags,
+                    ts=timestamp,
                 )
-                yield Metric(
-                    "temp_status", from_flag_to_status(as_dict["temp_flag"]), if_tags
+                yield ifdom.IFdomTempStatusMetric(
+                    value=from_flag_to_status(if_dom_item["temp_flag"]),
+                    tags=if_tags,
+                    ts=timestamp,
                 )
 
             except KeyError as exc:
-                log.error(f"{device.host}: unable to obtain DOM metric {str(exc)}")
-                return
+                log.error(
+                    f"{device.host} {if_name}: unable to obtain DOM metric {str(exc)}"
+                )
+                continue
 
-    if_dom_metrics = list(generate_metrics())
-    if if_dom_metrics:
+    metrics = list(generate_metrics())
+    if metrics:
         asyncio.create_task(
-            export_metrics(device=device, metric_prefix="ifdom", metrics=if_dom_metrics)
+            export_metrics(device=device, metrics=metrics)
         )
 
 

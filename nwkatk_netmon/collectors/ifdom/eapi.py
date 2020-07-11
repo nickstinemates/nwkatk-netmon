@@ -13,41 +13,32 @@
 #     limitations under the License.
 
 import asyncio
-from asynceapi import Device
+
 
 from nwkatk_netmon import timestamp_now
 from nwkatk_netmon.collectors import interval_collector, b64encodestr
 from nwkatk_netmon.collectors import ifdom
-from nwkatk_netmon.exporters.circonus import export_metrics
 from nwkatk_netmon.log import log
+from nwkatk_netmon.drivers.eapi import Device
 
 
 @ifdom.ifdom_start.register
-async def start(device: Device, interval, **kwargs):
-    log.info(f"{device.host}: Connecting to EOS device")
-
-    try:
-        res = await device.exec(["show hostname"])
-    except Exception as exc:
-        log.error(f"{device.host} No API access: {str(exc)}, skipping.")
-        return
-
-    device.host = res[0].output["hostname"]
-    log.info(f"{device.host}: Starting Interface DOM collection")
-    asyncio.create_task(get_dom_metrics(device, interval=interval, **kwargs))
+async def start(device: Device, interval, config):
+    log.info(f"{device.name}: Starting Interface DOM collection")
+    asyncio.create_task(get_dom_metrics(device, interval=interval, config=config))
 
 
 @interval_collector()
-async def get_dom_metrics(device: Device, interval: int, **kwargs):  # noqa
-    log.debug(f"{device.host}: Getting DOM information")
+async def get_dom_metrics(device: Device, interval: int, config):  # noqa
+    log.debug(f"{device.name}: Getting DOM information")
 
-    if_dom_res, if_desc_res = await device.exec(
+    if_dom_res, if_desc_res = await device.eapi.exec(
         ["show interfaces transceiver detail", "show interfaces description"]
     )
 
     if not if_dom_res.ok:
         log.error(
-            f"{device.host}: failed to collect DOM information: {if_dom_res.output}, aborting device."
+            f"{device.name}: failed to collect DOM information: {if_dom_res.output}, aborting device."
         )
         return
 
@@ -82,9 +73,8 @@ async def get_dom_metrics(device: Device, interval: int, **kwargs):  # noqa
     ]
 
     if if_metrics:
-        asyncio.create_task(
-            export_metrics(device=device, metrics=if_metrics)
-        )
+        exporter = config.exporters['circonus']
+        asyncio.create_task(exporter.export_metrics(device=device, metrics=if_metrics))
 
 
 def make_if_metrics(if_name, if_dom_data, if_desc):
@@ -107,22 +97,28 @@ def make_if_metrics(if_name, if_dom_data, if_desc):
 
     yield ifdom.IFdomRxPowerStatusMetric(
         value=threshold_outside(value=m_rxpow.value, thresholds=thresholds["rxPower"]),
-        tags=c_tags, ts=ts
+        tags=c_tags,
+        ts=ts,
     )
 
     yield ifdom.IFdomTxPowerStatusMetric(
         value=threshold_outside(value=m_txpow.value, thresholds=thresholds["txPower"]),
-        tags=c_tags, ts=ts
+        tags=c_tags,
+        ts=ts,
     )
 
     yield ifdom.IFdomTempStatusMetric(
-        value=threshold_outside(value=m_temp.value, thresholds=thresholds["temperature"]),
-        tags=c_tags, ts=ts
+        value=threshold_outside(
+            value=m_temp.value, thresholds=thresholds["temperature"]
+        ),
+        tags=c_tags,
+        ts=ts,
     )
 
     yield ifdom.IFdomVoltageStatusMetric(
         value=threshold_outside(value=m_volt.value, thresholds=thresholds["voltage"]),
-        tags=c_tags, ts=ts
+        tags=c_tags,
+        ts=ts,
     )
 
 

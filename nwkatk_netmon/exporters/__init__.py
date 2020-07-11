@@ -12,3 +12,30 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
+from typing import Optional, List
+from nwkatk.config_model import Credential, BaseModel
+
+from nwkatk_netmon.drivers import DriverBase
+from nwkatk_netmon import Metric
+
+
+class ExporterBase(object):
+    config: Optional[BaseModel] = None
+
+    def __init__(self, name):
+        self.name = name
+        self.private = None
+        self.tags = dict()
+        self.creds = None
+
+    def prepare(self, config):
+        pass
+
+    async def login(self, creds: Optional[Credential] = None) -> bool:
+        raise NotImplemented()
+
+    async def export_metrics(self, device: DriverBase, metrics: List[Metric]):
+        pass
+
+    def __str__(self):
+        return self.name

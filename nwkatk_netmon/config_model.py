@@ -12,27 +12,46 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
-from typing import Dict, Callable, Optional, List
+# -----------------------------------------------------------------------------
+# System Imports
+# -----------------------------------------------------------------------------
 
-from . import consts
+
+from typing import Dict, Callable, Optional, List, Type
+from operator import itemgetter
+
+# -----------------------------------------------------------------------------
+# Public Imports
+# -----------------------------------------------------------------------------
+
+from first import first
 
 from pydantic import (
-    BaseSettings,
+    BaseModel, BaseSettings,
     Field,
     ValidationError,  # noqa
     PositiveInt,
     validator,
+    root_validator,
 )
 
+# Private Imports
+
+from nwkatk_netmon import consts
 
 from nwkatk.config_model import (
     NoExtraBaseModel,
     EnvExpand,
     EnvSecretStr,
     Credential,
-    EntryPointImportPath, ImportPath,
+    PackagedEntryPoint,
+    EntryPointImportPath,
+    ImportPath,
     FilePathEnvExpand,
 )
+
+from nwkatk_netmon import CollectorType
+from nwkatk_netmon.drivers import DriverBase
 
 
 class DefaultCredential(Credential, BaseSettings):
@@ -44,23 +63,85 @@ class DefaultsModel(NoExtraBaseModel, BaseSettings):
     interval: Optional[PositiveInt] = Field(default=consts.DEFAULT_INTERVAL)
     inventory: FilePathEnvExpand
     credentials: DefaultCredential
+    exporters: Optional[List[str]]
 
 
-class OSNameModel(NoExtraBaseModel):
-    driver: Callable
-    packages: List[ImportPath]
+class DeviceDriverModel(NoExtraBaseModel):
+    driver: Optional[Type[DriverBase]]
+    use: Optional[Type[DriverBase]]
+    modules: List[ImportPath]
 
-    @validator('driver', pre=True)
-    def _to_callable(cls, val):
+    @validator("driver", pre=True)
+    def _from_driver_to_callable(cls, val):
         return EntryPointImportPath.validate(val)
+
+    @validator("use", pre=True)
+    def _from_use_to_callable(cls, val):
+        driver = PackagedEntryPoint.validate(val)
+        return driver
+
+    @root_validator
+    def normalize_driver(cls, values):
+        driver = values["driver"] = first(itemgetter("driver", "use")(values))
+        if not driver:
+            raise ValueError("Missing one of ['driver', 'use']")
+        return values
+
+
+class CollectorModel(NoExtraBaseModel):
+    collector: Optional[Type[CollectorType]]
+    use: Optional[Type[CollectorType]]
+    config: Optional[Dict]
+
+    @validator("collector", pre=True)
+    def _from_collector_to_callable(cls, val):
+        return EntryPointImportPath.validate(val)
+
+    @validator("use", pre=True)
+    def _from_use_to_callable(cls, val):
+        return PackagedEntryPoint.validate(val)
+
+    @root_validator
+    def normalize_start(cls, values):
+        start = values["collector"] = first(itemgetter("collector", "use")(values))
+        if not start:
+            raise ValueError("Missing one of ['collector', 'use']")
+
+        return values
+
+
+class ExporterModel(NoExtraBaseModel):
+    exporter: Optional[Type]
+    use: Optional[Callable]
+    config: Optional[Dict]
+
+    @validator("use", pre=True)
+    def _from_use_to_callable(cls, val):
+        return PackagedEntryPoint.validate(val)
+
+    @root_validator
+    def normalize_exporter(cls, values):
+        start = values["exporter"] = first(itemgetter("exporter", "use")(values))
+        if not start:
+            raise ValueError("Missing one of ['exporter', 'use']")
+
+        return values
 
 
 class ConfigModel(NoExtraBaseModel):
     defaults: DefaultsModel
-    os_name: Dict[str, OSNameModel]
-    collectors: Dict[str, Callable]
-    collector_configs: Optional[Dict[str, Dict]] = Field(default_factory=lambda: {})
+    device_drivers: Dict[str, DeviceDriverModel]
+    collectors: Dict[str, CollectorModel]
+    exporters: Dict[str, ExporterModel]
 
-    @validator('collectors', pre=True, each_item=True)
-    def _to_callable(cls, val):
-        return EntryPointImportPath.validate(val)
+    @validator('exporters')
+    def validate_exporter_config(cls, exporters):
+        for e_name, e_val in exporters.items():
+            e_cls = e_val.exporter
+            e_cfg_model = e_cls.config
+            e_val.config = e_cfg_model.validate(e_val.config)
+            e_inst = e_cls(e_name)
+            e_inst.prepare(e_val.config)
+            exporters[e_name] = e_inst
+
+        return exporters

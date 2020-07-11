@@ -24,7 +24,6 @@ from functools import lru_cache
 # -----------------------------------------------------------------------------
 
 from lxml.etree import Element
-from asyncnxapi import Device
 
 # -----------------------------------------------------------------------------
 # Private Imports
@@ -33,49 +32,39 @@ from asyncnxapi import Device
 from nwkatk_netmon import timestamp_now
 from nwkatk_netmon.collectors import b64encodestr, interval_collector
 from nwkatk_netmon.collectors import ifdom
-from nwkatk_netmon.exporters.circonus import export_metrics
 from nwkatk_netmon.log import log
+from nwkatk_netmon.drivers.nxapi import Device
 
 
 @ifdom.ifdom_start.register
 async def start(device: Device, interval, **kwargs):
-    log.info(f"{device.host}: Connecting to NX-OS device")
-
-    try:
-        res = await device.exec(["show hostname"])
-    except Exception as exc:
-        log.error(f"{device.host} No API access: {str(exc)}, skipping.")
-        return
-
-    device.host = res[0].output.findtext("hostname")
-    log.info(f"{device.host}: Starting Interface DOM collection")
-
+    log.info(f"{device.name}: Starting Interface DOM collection")
     asyncio.create_task(get_dom_metrics(device, interval=interval, **kwargs))
 
 
 _METRIC_VALUE_MAP = {
-    'voltage': ifdom.IFdomVoltageMetric,
-    'tx_pwr': ifdom.IFdomTxPowerMetric,
-    'rx_pwr': ifdom.IFdomRxPowerMetric,
-    'temperature': ifdom.IFdomTempMetric
+    "voltage": ifdom.IFdomVoltageMetric,
+    "tx_pwr": ifdom.IFdomTxPowerMetric,
+    "rx_pwr": ifdom.IFdomRxPowerMetric,
+    "temperature": ifdom.IFdomTempMetric,
 }
 
 
 _METRIC_STATUS_MAP = {
-    'rx_pwr_flag': ifdom.IFdomRxPowerStatusMetric,
-    'tx_pwr_flag': ifdom.IFdomTxPowerStatusMetric,
-    'volt_flag': ifdom.IFdomVoltageStatusMetric,
-    'temp_flag': ifdom.IFdomTempStatusMetric
+    "rx_pwr_flag": ifdom.IFdomRxPowerStatusMetric,
+    "tx_pwr_flag": ifdom.IFdomTxPowerStatusMetric,
+    "volt_flag": ifdom.IFdomVoltageStatusMetric,
+    "temp_flag": ifdom.IFdomTempStatusMetric,
 }
 
 
 @interval_collector()
-async def get_dom_metrics(device: Device, interval: int, **kwargs):  # noqa
+async def get_dom_metrics(device: Device, interval: int, config):  # noqa
     timestamp = timestamp_now()
 
-    log.info(f"{device.host}: Process DOM metrics ts={timestamp}")
+    log.info(f"{device.name}: Process DOM metrics ts={timestamp}")
 
-    ifs_dom_res, ifs_status_res = await device.exec(
+    ifs_dom_res, ifs_status_res = await device.nxapi.exec(
         ["show interface transceiver details", "show interface status"]
     )
 
@@ -89,6 +78,7 @@ async def get_dom_metrics(device: Device, interval: int, **kwargs):  # noqa
         )
     ]
 
+    # noinspection PyArgumentList
     def generate_metrics():
 
         for if_dom_item in ifs_dom_data:
@@ -113,7 +103,7 @@ async def get_dom_metrics(device: Device, interval: int, **kwargs):  # noqa
             if_tags = {
                 "if_name": if_name,
                 "if_desc": b64encodestr(if_desc),
-                "media": b64encodestr(if_media)
+                "media": b64encodestr(if_media),
             }
 
             for nx_field, metric_cls in _METRIC_VALUE_MAP.items():
@@ -122,14 +112,17 @@ async def get_dom_metrics(device: Device, interval: int, **kwargs):  # noqa
 
             for nx_field, metric_cls in _METRIC_STATUS_MAP.items():
                 if metric_value := if_dom_item.get(nx_field):
-                    yield metric_cls(value=from_flag_to_status(metric_value), tags=if_tags, ts=timestamp)
+                    yield metric_cls(
+                        value=from_flag_to_status(metric_value),
+                        tags=if_tags,
+                        ts=timestamp,
+                    )
 
     metrics = list(generate_metrics())
 
     if metrics:
-        asyncio.create_task(
-            export_metrics(device=device, metrics=metrics)
-        )
+        exporter = config.exporters['circonus']
+        asyncio.create_task(exporter.export_metrics(device=device, metrics=metrics))
 
 
 @lru_cache

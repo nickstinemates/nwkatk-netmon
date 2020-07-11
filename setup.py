@@ -36,9 +36,21 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=requirements(),
-    entry_points={'console_scripts': [
-        "nwa-netmon = nwkatk_netmon.script:main"
-    ]},
+    entry_points={
+        'console_scripts': [
+            "nwka-netmon = nwkatk_netmon.script:main"
+        ],
+        'nwka_netmon.device_drivers': [
+            "cisco.nxapi = nwkatk_netmon.drivers.nxapi:Device",
+            "arista.eos = nwkatk_netmon.drivers.eapi:Device"
+        ],
+        'nwka_netmon.collectors': [
+            "ifdom = nwkatk_netmon.collectors.ifdom:IFdomCollectorSpec"
+        ],
+        'nwka_netmon.exporters': [
+            "circonus = nwkatk_netmon.exporters.circonus:CirconusExporter"
+        ],
+    },
     dependency_links=[
         'git+https://github.com/jeremyschulman/nwkatk-runner.git#egg=nwkatk',
         'git+https://github.com/jeremyschulman/aio-nxapi.git#egg=aio-nxapi',

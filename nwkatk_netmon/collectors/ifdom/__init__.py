@@ -16,16 +16,17 @@ from functools import singledispatch
 from pydantic.dataclasses import dataclass
 from pydantic import conint
 
-from nwkatk_netmon import Metric
+from nwkatk_netmon import Metric, CollectorType
 
 
 @singledispatch
-async def ifdom_start(device, **kwargs):  # noqa
+async def ifdom_start(device, interval, config):  # noqa
     cls_name = device.__class__.__name__
     raise RuntimeError(f"IFdom: No entry-point registered for device type: {cls_name}")
 
 
-IFdomStatusValue = conint(ge=0, le=2)
+# the status values will be encoded in the metric to mean 0=OK, 1=WARN, 2=ALERT
+_IFdomStatusValue = conint(ge=0, le=2)
 
 
 @dataclass
@@ -36,7 +37,7 @@ class IFdomTempMetric(Metric):
 
 @dataclass
 class IFdomTempStatusMetric(Metric):
-    value: IFdomStatusValue
+    value: _IFdomStatusValue
     name: str = "ifdom_temp_status"
 
 
@@ -48,19 +49,19 @@ class IFdomRxPowerMetric(Metric):
 
 @dataclass
 class IFdomRxPowerStatusMetric(Metric):
-    value: IFdomStatusValue
+    value: _IFdomStatusValue
     name: str = "ifdom_rxpower_status"
 
 
 @dataclass
 class IFdomTxPowerMetric(Metric):
     value: float
-    name: str = 'ifdom_txpower'
+    name: str = "ifdom_txpower"
 
 
 @dataclass
 class IFdomTxPowerStatusMetric(Metric):
-    value: IFdomStatusValue
+    value: _IFdomStatusValue
     name: str = "ifdom_txpower_status"
 
 
@@ -72,5 +73,19 @@ class IFdomVoltageMetric(Metric):
 
 @dataclass
 class IFdomVoltageStatusMetric(Metric):
-    value: IFdomStatusValue
+    value: _IFdomStatusValue
     name: str = "ifdom_voltag_status"
+
+
+class IFdomCollectorSpec(CollectorType):
+    start = ifdom_start
+    metrics = [
+        IFdomRxPowerMetric,
+        IFdomRxPowerStatusMetric,
+        IFdomTxPowerMetric,
+        IFdomTxPowerStatusMetric,
+        IFdomTempMetric,
+        IFdomTempStatusMetric,
+        IFdomVoltageMetric,
+        IFdomVoltageStatusMetric,
+    ]

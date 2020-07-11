@@ -12,6 +12,7 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
+
 import asyncio
 import functools
 from base64 import encodebytes
@@ -46,7 +47,7 @@ def interval_collector():
             # sleep for an interval of time and then create a new task to invoke the wrapped coroutine so that we get
             # the effect of a periodic invocation.
 
-            log.debug(f"{device.host}: Waiting {interval}s before next collection")
+            log.debug(f"{device.name}: Waiting {interval}s before next collection")
             await asyncio.sleep(interval)
             asyncio.create_task(wrapped(device=device, interval=interval, **kwargs))
 

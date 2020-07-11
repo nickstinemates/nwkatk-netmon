@@ -12,12 +12,12 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
-from typing import Any, Mapping, Optional
 import time
-from pydantic import dataclasses, PositiveInt, Field, fields
-from dataclasses import InitVar
+from typing import Any, Mapping, Optional, Callable, List, Type
 
-__all__ = ['Metric', 'timestamp_now']
+from pydantic import dataclasses, PositiveInt, Field, fields, BaseModel
+
+__all__ = ["Metric", "CollectorType", "timestamp_now"]
 
 
 def timestamp_now():
@@ -37,10 +37,16 @@ class Metric:
         name: str = 'ifdom_rxpower'
         value: float = Field(..., description='optic receive power as dBm')
     """
-    ts: PositiveInt = Field(default_factory=timestamp_now, description='metric timestamp in milliseconds since epoch')
-    tags: Mapping = Field(default_factory=lambda: {}, description='tags as key-value mapping')
-    value: Any = Field(..., description='metric value, should be typed by subclass')
-    name: str = Field(..., description='metric name')
+
+    ts: PositiveInt = Field(
+        default_factory=timestamp_now,
+        description="metric timestamp in milliseconds since epoch",
+    )
+    tags: Mapping = Field(
+        default_factory=lambda: {}, description="tags as key-value mapping"
+    )
+    value: Any = Field(description="metric value, should be typed by subclass")
+    name: str = Field(description="metric name")
 
     def __post_init__(self):
         # TODO: I cannot determine how to use Field so that the default factory is called
@@ -50,3 +56,21 @@ class Metric:
 
         if isinstance(self.tags, fields.FieldInfo):
             self.tags = self.tags.default_factory()
+
+
+@dataclasses.dataclass
+class CollectorType:
+    """
+    This dataclass is used to define a collector "type" that will be used by Developers
+    so that they can implement per-device
+    """
+
+    start: Callable = Field(
+        description="The coroutine that will start the collector process (task)"
+    )
+    config: Optional[BaseModel] = Field(
+        description="collector specific configuration options"
+    )
+    metrics: List[Type[Metric]] = Field(
+        description="list of metric types supported by this collector"
+    )

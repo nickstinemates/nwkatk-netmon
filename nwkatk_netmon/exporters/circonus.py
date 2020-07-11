@@ -12,23 +12,72 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
-import os
-import asyncio
-from functools import lru_cache
+# -----------------------------------------------------------------------------
+# System Imports
+# -----------------------------------------------------------------------------
+
 from itertools import chain
+
+# -----------------------------------------------------------------------------
+# Public Imports
+# -----------------------------------------------------------------------------
 
 import httpx
 from tenacity import retry, wait_exponential
+from pydantic import (
+    BaseModel, AnyHttpUrl,
+    validator
+)
+
+from nwkatk.config_model import EnvSecretStr
+
+# -----------------------------------------------------------------------------
+# Private Imports
+# -----------------------------------------------------------------------------
 
 from nwkatk_netmon import Metric
 from nwkatk_netmon.log import log
+from nwkatk_netmon.drivers import DriverBase
+from nwkatk_netmon.exporters import ExporterBase
 
-circonus_sem4 = asyncio.Semaphore(100)
+
+class CirconusConfigModel(BaseModel):
+    circonus_datasubmission_url: EnvSecretStr
 
 
-@lru_cache()
-def circonus_url():
-    return os.environ["CIRCONUS_URL"]
+class CirconusExporter(ExporterBase):
+    config = CirconusConfigModel
+
+    def __init__(self, name):
+        super().__init__(name)
+        self.post_url = None
+        self.httpx = None
+
+    def prepare(self, config: CirconusConfigModel):
+        self.post_url = config.circonus_datasubmission_url.get_secret_value()
+        self.httpx = httpx.AsyncClient(
+            verify=False, headers={"content-type": "application/json"},
+        )
+
+    async def export_metrics(self, device: DriverBase, metrics):
+        log.debug(f"{device.name}: Exporting {len(metrics)} metrics")
+
+        post_data = dict(
+            make_circonus_metric(device_tags=device.tags, metric=metric,)
+            for metric in metrics
+        )
+
+        @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
+        async def to_circonus():
+            res = await self.httpx.put(self.post_url, json=post_data)
+            log.debug(f"{device.name}: Circonus PUT status {res.status_code}")
+
+        try:
+            await to_circonus()
+
+        except Exception as exc:  # noqa
+            exc_name = exc.__class__.__name__
+            log.error(f"{device.name}: Unable to send metrics to Circonus: {exc_name}")
 
 
 def make_circonus_metric(device_tags, metric: Metric):
@@ -45,31 +94,3 @@ def make_circonus_metric(device_tags, metric: Metric):
     name = f"{metric.name}|ST[{stream_tags}]"
     value = metric.value
     return name, value
-
-
-async def export_metrics(device, metrics):
-    log.debug(f"{device.host}: Exporting {len(metrics)} metrics")
-
-    post_url = circonus_url()
-    post_data = dict(
-        make_circonus_metric(
-            device_tags=device.private["tags"],
-            metric=metric,
-        )
-        for metric in metrics
-    )
-
-    @retry(wait=wait_exponential(multiplier=1, min=4, max=10))
-    async def to_circonus():
-        async with httpx.AsyncClient(
-            verify=False, headers={"content-type": "application/json"},
-        ) as api:
-            res = await api.put(post_url, json=post_data)
-            log.debug(f"{device.host}: Circonus PUT status {res.status_code}")
-
-    try:
-        await to_circonus()
-
-    except Exception as exc:  # noqa
-        exc_name = exc.__class__.__name__
-        log.error(f"{device.host}: Unable to send metrics to Circonus: {exc_name}")

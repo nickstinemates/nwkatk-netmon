@@ -68,12 +68,9 @@ async def async_main_device(executor, inventory_rec, config: ConfigModel):
 
     for c_name, c_spec in config.collectors.items():
         c_start = c_spec.collector.start
-
         c_config = c_spec.config
         c_config.interval = c_config.interval or interval
         await c_start(device, executor=executor, config=c_config)
-
-        # asyncio.create_task(c_start(device, interval=interval, config=config))
 
 
 # -----------------------------------------------------------------------------

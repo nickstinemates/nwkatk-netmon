@@ -23,7 +23,7 @@ from nwkatk_netmon.drivers.eapi import Device
 from nwkatk_netmon.collectors import ifdom
 
 
-@ifdom.IFdomCollectorSpec.start.register
+@ifdom.register
 async def start(device: Device, starter: CollectorExecutor, config, **kwargs):  # noqa
     log.info(f"{device.name}: Starting Interface DOM collection")
     starter.start(get_dom_metrics, interval=config.interval, device=device)

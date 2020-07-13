@@ -89,3 +89,6 @@ class IFdomCollectorSpec(CollectorType):
         IFdomVoltageMetric,
         IFdomVoltageStatusMetric,
     ]
+
+
+register = IFdomCollectorSpec.start.register

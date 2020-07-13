@@ -16,14 +16,8 @@ from functools import singledispatch
 from pydantic.dataclasses import dataclass
 from pydantic import conint
 
-from nwkatk_netmon import Metric, CollectorType
-
-
-@singledispatch
-async def ifdom_start(device, interval, config):  # noqa
-    cls_name = device.__class__.__name__
-    raise RuntimeError(f"IFdom: No entry-point registered for device type: {cls_name}")
-
+from nwkatk_netmon import Metric
+from nwkatk_netmon.collectors import CollectorType
 
 # the status values will be encoded in the metric to mean 0=OK, 1=WARN, 2=ALERT
 _IFdomStatusValue = conint(ge=0, le=2)
@@ -75,6 +69,12 @@ class IFdomVoltageMetric(Metric):
 class IFdomVoltageStatusMetric(Metric):
     value: _IFdomStatusValue
     name: str = "ifdom_voltag_status"
+
+
+@singledispatch
+async def ifdom_start(device, **kwargs):  # noqa
+    cls_name = device.__class__.__name__
+    raise RuntimeError(f"IFdom: No entry-point registered for device type: {cls_name}")
 
 
 class IFdomCollectorSpec(CollectorType):

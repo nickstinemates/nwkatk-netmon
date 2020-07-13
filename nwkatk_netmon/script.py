@@ -36,6 +36,7 @@ from nwkatk_netmon.config import load_config_file
 from nwkatk_netmon.config_model import ConfigModel
 from nwkatk_netmon.log import log
 
+from nwkatk_netmon.collectors import CollectorExecutor
 
 VERSION = metadata.version(__package__)
 
@@ -66,14 +67,20 @@ async def async_main_device(inventory_rec, config: ConfigModel):
     #       ....
 
     # Start each collector on the device
+    starter = CollectorExecutor(config=config)
 
     for c_name, c_spec in config.collectors.items():
         c_start = c_spec.collector.start
-        # c_config = c_spec.collector.config
-        asyncio.create_task(c_start(device, interval=interval, config=config))
+
+        c_config = c_spec.config
+        c_config.interval = c_config.interval or interval
+        await c_start(device, starter=starter, config=c_config)
+
+        # asyncio.create_task(c_start(device, interval=interval, config=config))
 
 
 # -----------------------------------------------------------------------------
+
 
 def set_log_level(ctx, param, value):  # noqa
     log.setLevel(value.upper())

@@ -1,35 +1,36 @@
-#     Copyright 2020, Jeremy Schulman
+#  Copyright 2020, Jeremy Schulman
 #
-#     Licensed under the Apache License, Version 2.0 (the "License");
-#     you may not use this file except in compliance with the License.
-#     You may obtain a copy of the License at
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
-#     Unless required by applicable law or agreed to in writing, software
-#     distributed under the License is distributed on an "AS IS" BASIS,
-#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#     See the License for the specific language governing permissions and
-#     limitations under the License.
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
-import asyncio
+from typing import Optional, List
 
-
-from nwkatk_netmon import timestamp_now
-from nwkatk_netmon.collectors import interval_collector, b64encodestr
-from nwkatk_netmon.collectors import ifdom
+from nwkatk_netmon import timestamp_now, Metric
+from nwkatk_netmon.collectors import CollectorExecutor, b64encodestr
 from nwkatk_netmon.log import log
 from nwkatk_netmon.drivers.eapi import Device
 
 
-@ifdom.ifdom_start.register
-async def start(device: Device, interval, config):
+from nwkatk_netmon.collectors import ifdom
+
+
+@ifdom.IFdomCollectorSpec.start.register
+async def start(device: Device, starter: CollectorExecutor, config, **kwargs):  # noqa
     log.info(f"{device.name}: Starting Interface DOM collection")
-    asyncio.create_task(get_dom_metrics(device, interval=interval, config=config))
+    starter.start(get_dom_metrics, interval=config.interval, device=device)
 
 
-@interval_collector()
-async def get_dom_metrics(device: Device, interval: int, config):  # noqa
+async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
+
     log.debug(f"{device.name}: Getting DOM information")
 
     if_dom_res, if_desc_res = await device.eapi.exec(
@@ -38,7 +39,7 @@ async def get_dom_metrics(device: Device, interval: int, config):  # noqa
 
     if not if_dom_res.ok:
         log.error(
-            f"{device.name}: failed to collect DOM information: {if_dom_res.output}, aborting device."
+            f"{device.name}: failed to collect DOM information: {if_dom_res.output}, aborting."
         )
         return
 
@@ -49,9 +50,10 @@ async def get_dom_metrics(device: Device, interval: int, config):  # noqa
 
     def ok_process_if(if_name):
 
-        # if the interface name does not exist in the interface description data it likely means that the interface name
-        # is an unused transciever lane; and if so then it would be the same data as the "first lane".  In this case we
-        # don't need to record a duplicate metric.
+        # if the interface name does not exist in the interface description data
+        # it likely means that the interface name is an unused transciever lane;
+        # and if so then it would be the same data as the "first lane".  In this
+        # case we don't need to record a duplicate metric.
 
         if not (if_desc := ifs_desc.get(if_name)):
             return False
@@ -63,7 +65,7 @@ async def get_dom_metrics(device: Device, interval: int, config):  # noqa
 
         return True
 
-    if_metrics = [
+    return [
         measurement
         for if_name, if_dom_data in ifs_dom.items()
         if if_dom_data and ok_process_if(if_name)
@@ -71,10 +73,6 @@ async def get_dom_metrics(device: Device, interval: int, config):  # noqa
             if_name, if_dom_data, if_desc=ifs_desc[if_name]["description"]
         )
     ]
-
-    if if_metrics:
-        exporter = config.exporters['circonus']
-        asyncio.create_task(exporter.export_metrics(device=device, metrics=if_metrics))
 
 
 def make_if_metrics(if_name, if_dom_data, if_desc):

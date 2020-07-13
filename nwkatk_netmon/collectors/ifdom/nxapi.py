@@ -16,7 +16,7 @@
 # System Imports
 # -----------------------------------------------------------------------------
 
-import asyncio
+from typing import Optional, List
 from functools import lru_cache
 
 # -----------------------------------------------------------------------------
@@ -29,17 +29,19 @@ from lxml.etree import Element
 # Private Imports
 # -----------------------------------------------------------------------------
 
-from nwkatk_netmon import timestamp_now
-from nwkatk_netmon.collectors import b64encodestr, interval_collector
-from nwkatk_netmon.collectors import ifdom
 from nwkatk_netmon.log import log
+from nwkatk_netmon import Metric, timestamp_now
+from nwkatk_netmon.collectors import CollectorExecutor, b64encodestr
 from nwkatk_netmon.drivers.nxapi import Device
 
 
-@ifdom.ifdom_start.register
-async def start(device: Device, interval, **kwargs):
-    log.info(f"{device.name}: Starting Interface DOM collection")
-    asyncio.create_task(get_dom_metrics(device, interval=interval, **kwargs))
+from nwkatk_netmon.collectors import ifdom
+
+
+@ifdom.IFdomCollectorSpec.start.register
+async def start(device: Device, starter: CollectorExecutor, config, **kwargs):  # noqa
+    log.info(f"{device.name}: Starting Cisco NXAPI Interface DOM collection")
+    starter.start(get_dom_metrics, interval=config.interval, device=device)
 
 
 _METRIC_VALUE_MAP = {
@@ -58,8 +60,7 @@ _METRIC_STATUS_MAP = {
 }
 
 
-@interval_collector()
-async def get_dom_metrics(device: Device, interval: int, config):  # noqa
+async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
     timestamp = timestamp_now()
 
     log.info(f"{device.name}: Process DOM metrics ts={timestamp}")
@@ -68,8 +69,8 @@ async def get_dom_metrics(device: Device, interval: int, config):  # noqa
         ["show interface transceiver details", "show interface status"]
     )
 
-    # find all interfaces that have a transceiver present, and the transceiver has a temperature value - guard against
-    # non-optical transceivers.
+    # find all interfaces that have a transceiver present, and the transceiver
+    # has a temperature value - guard against non-optical transceivers.
 
     ifs_dom_data = [
         row_to_dict(ele)
@@ -118,11 +119,7 @@ async def get_dom_metrics(device: Device, interval: int, config):  # noqa
                         ts=timestamp,
                     )
 
-    metrics = list(generate_metrics())
-
-    if metrics:
-        exporter = config.exporters['circonus']
-        asyncio.create_task(exporter.export_metrics(device=device, metrics=metrics))
+    return list(generate_metrics())
 
 
 @lru_cache

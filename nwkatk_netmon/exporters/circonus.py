@@ -24,10 +24,7 @@ from itertools import chain
 
 import httpx
 from tenacity import retry, wait_exponential
-from pydantic import (
-    BaseModel, AnyHttpUrl,
-    validator
-)
+from pydantic import BaseModel, AnyHttpUrl, validator
 
 from nwkatk.config_model import EnvSecretStr
 

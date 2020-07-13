@@ -27,7 +27,8 @@ from operator import itemgetter
 from first import first
 
 from pydantic import (
-    BaseModel, BaseSettings,
+    BaseModel,
+    BaseSettings,
     Field,
     ValidationError,  # noqa
     PositiveInt,
@@ -50,7 +51,7 @@ from nwkatk.config_model import (
     FilePathEnvExpand,
 )
 
-from nwkatk_netmon import CollectorType
+from nwkatk_netmon.collectors import CollectorType, CollectorConfigModel
 from nwkatk_netmon.drivers import DriverBase
 
 
@@ -89,25 +90,21 @@ class DeviceDriverModel(NoExtraBaseModel):
 
 
 class CollectorModel(NoExtraBaseModel):
-    collector: Optional[Type[CollectorType]]
     use: Optional[Type[CollectorType]]
-    config: Optional[Dict]
-
-    @validator("collector", pre=True)
-    def _from_collector_to_callable(cls, val):
-        return EntryPointImportPath.validate(val)
+    collector: Optional[Type[CollectorType]]
+    config: Optional[CollectorConfigModel]
 
     @validator("use", pre=True)
     def _from_use_to_callable(cls, val):
         return PackagedEntryPoint.validate(val)
 
-    @root_validator
-    def normalize_start(cls, values):
-        start = values["collector"] = first(itemgetter("collector", "use")(values))
-        if not start:
-            raise ValueError("Missing one of ['collector', 'use']")
+    @validator("collector", pre=True, always=True)
+    def _from_collector_to_callable(cls, val, values):
+        return EntryPointImportPath.validate(val) if val else values["use"]
 
-        return values
+    @validator("config", pre=True, always=True)
+    def _xform_config_to_obj(cls, val, values):
+        return values["collector"].config.parse_obj(val or {})
 
 
 class ExporterModel(NoExtraBaseModel):
@@ -124,7 +121,6 @@ class ExporterModel(NoExtraBaseModel):
         start = values["exporter"] = first(itemgetter("exporter", "use")(values))
         if not start:
             raise ValueError("Missing one of ['exporter', 'use']")
-
         return values
 
 
@@ -134,8 +130,8 @@ class ConfigModel(NoExtraBaseModel):
     collectors: Dict[str, CollectorModel]
     exporters: Dict[str, ExporterModel]
 
-    @validator('exporters')
-    def validate_exporter_config(cls, exporters):
+    @validator("exporters")
+    def init_exporters(cls, exporters):
         for e_name, e_val in exporters.items():
             e_cls = e_val.exporter
             e_cfg_model = e_cls.config

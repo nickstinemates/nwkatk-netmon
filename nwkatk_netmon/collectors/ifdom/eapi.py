@@ -1,36 +1,94 @@
-#     Copyright 2020, Jeremy Schulman
+#  Copyright 2020, Jeremy Schulman
 #
-#     Licensed under the Apache License, Version 2.0 (the "License");
-#     you may not use this file except in compliance with the License.
-#     You may obtain a copy of the License at
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
-#     Unless required by applicable law or agreed to in writing, software
-#     distributed under the License is distributed on an "AS IS" BASIS,
-#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#     See the License for the specific language governing permissions and
-#     limitations under the License.
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+"""
+This file contains the Interface DOM metrics collector supporing the Arista EOS
+devices.
+"""
 
-import asyncio
+# -----------------------------------------------------------------------------
+# System Imports
+# -----------------------------------------------------------------------------
 
+from typing import Optional, List
 
-from nwkatk_netmon import timestamp_now
-from nwkatk_netmon.collectors import interval_collector, b64encodestr
-from nwkatk_netmon.collectors import ifdom
+# -----------------------------------------------------------------------------
+# Public Imports
+# -----------------------------------------------------------------------------
+
+from nwkatk_netmon import timestamp_now, Metric
+from nwkatk_netmon.collectors import (
+    CollectorExecutor,
+    b64encodestr,
+    CollectorConfigModel,
+)
 from nwkatk_netmon.log import log
 from nwkatk_netmon.drivers.eapi import Device
 
+# -----------------------------------------------------------------------------
+# Private Imports
+# -----------------------------------------------------------------------------
 
-@ifdom.ifdom_start.register
-async def start(device: Device, interval, config):
-    log.info(f"{device.name}: Starting Interface DOM collection")
-    asyncio.create_task(get_dom_metrics(device, interval=interval, config=config))
+from nwkatk_netmon.collectors import ifdom
+
+# no exports
+__all__ = []
 
 
-@interval_collector()
-async def get_dom_metrics(device: Device, interval: int, config):  # noqa
+@ifdom.register
+async def start(
+    device: Device, executor: CollectorExecutor, config: CollectorConfigModel
+):
+    """
+    The IF DOM collector start coroutine for Arista EOS devices.  The purpose of this
+    coroutine is to start the collector task.  Nothing fancy.
+
+    Parameters
+    ----------
+    device:
+        The device driver instance for the Arista device
+
+    executor:
+        The netmon executor that is used to start one or more collector tasks.
+        In this instance, there is only one collector task started per device.
+
+    config:
+        The IF DOM collector config.  Currently there the IF DOM collector does
+        not provide any additional configuration options.
+    """
+    log.info(f"{device.name}: Starting Arista EOS Interface DOM collection")
+    executor.start(get_dom_metrics, interval=config.interval, device=device)
+
+
+async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
+    """
+    This coroutine will be executed as a asyncio Task on a periodic basis, the
+    purpose is to collect data from the device and return the list of Interface
+    DOM metrics.
+
+    Parameters
+    ----------
+    device:
+        The Arisa EOS device driver instance for this device.
+
+    Returns
+    -------
+    Option list of Metic items.
+    """
     log.debug(f"{device.name}: Getting DOM information")
+
+    # Execute the required "show" commands to colelct the interface information
+    # needed to produce the Metrics
 
     if_dom_res, if_desc_res = await device.eapi.exec(
         ["show interfaces transceiver detail", "show interfaces description"]
@@ -38,7 +96,7 @@ async def get_dom_metrics(device: Device, interval: int, config):  # noqa
 
     if not if_dom_res.ok:
         log.error(
-            f"{device.name}: failed to collect DOM information: {if_dom_res.output}, aborting device."
+            f"{device.name}: failed to collect DOM information: {if_dom_res.output}, aborting."
         )
         return
 
@@ -47,11 +105,12 @@ async def get_dom_metrics(device: Device, interval: int, config):  # noqa
     ifs_desc = if_desc_res.output["interfaceDescriptions"]
     ifs_dom = if_dom_res.output["interfaces"]
 
-    def ok_process_if(if_name):
+    def __ok_process_if(if_name):
 
-        # if the interface name does not exist in the interface description data it likely means that the interface name
-        # is an unused transciever lane; and if so then it would be the same data as the "first lane".  In this case we
-        # don't need to record a duplicate metric.
+        # if the interface name does not exist in the interface description data
+        # it likely means that the interface name is an unused transciever lane;
+        # and if so then it would be the same data as the "first lane".  In this
+        # case we don't need to record a duplicate metric.
 
         if not (if_desc := ifs_desc.get(if_name)):
             return False
@@ -63,21 +122,43 @@ async def get_dom_metrics(device: Device, interval: int, config):  # noqa
 
         return True
 
-    if_metrics = [
+    return [
         measurement
         for if_name, if_dom_data in ifs_dom.items()
-        if if_dom_data and ok_process_if(if_name)
-        for measurement in make_if_metrics(
+        if if_dom_data and __ok_process_if(if_name)
+        for measurement in _make_if_metrics(
             if_name, if_dom_data, if_desc=ifs_desc[if_name]["description"]
         )
     ]
 
-    if if_metrics:
-        exporter = config.exporters['circonus']
-        asyncio.create_task(exporter.export_metrics(device=device, metrics=if_metrics))
+
+# -----------------------------------------------------------------------------
+#
+#                            PRIVATE FUNCTIONS
+#
+# -----------------------------------------------------------------------------
 
 
-def make_if_metrics(if_name, if_dom_data, if_desc):
+def _make_if_metrics(if_name: str, if_dom_data: dict, if_desc: str):
+    """
+    This function is used to create the specific IFdom Metrics for a specific
+    interface.
+
+    Parameters
+    ----------
+    if_name:
+        The interface name
+
+    if_dom_data:
+        The interface transceiver details as retrieved via the EAPI
+
+    if_desc:
+        The interface description value
+
+    Yields
+    ------
+    A collection of IFdom specific Metrics.
+    """
     ts = timestamp_now()
 
     c_tags = {
@@ -96,19 +177,19 @@ def make_if_metrics(if_name, if_dom_data, if_desc):
     thresholds = if_dom_data["details"]
 
     yield ifdom.IFdomRxPowerStatusMetric(
-        value=threshold_outside(value=m_rxpow.value, thresholds=thresholds["rxPower"]),
+        value=_threshold_outside(value=m_rxpow.value, thresholds=thresholds["rxPower"]),
         tags=c_tags,
         ts=ts,
     )
 
     yield ifdom.IFdomTxPowerStatusMetric(
-        value=threshold_outside(value=m_txpow.value, thresholds=thresholds["txPower"]),
+        value=_threshold_outside(value=m_txpow.value, thresholds=thresholds["txPower"]),
         tags=c_tags,
         ts=ts,
     )
 
     yield ifdom.IFdomTempStatusMetric(
-        value=threshold_outside(
+        value=_threshold_outside(
             value=m_temp.value, thresholds=thresholds["temperature"]
         ),
         tags=c_tags,
@@ -116,13 +197,26 @@ def make_if_metrics(if_name, if_dom_data, if_desc):
     )
 
     yield ifdom.IFdomVoltageStatusMetric(
-        value=threshold_outside(value=m_volt.value, thresholds=thresholds["voltage"]),
+        value=_threshold_outside(value=m_volt.value, thresholds=thresholds["voltage"]),
         tags=c_tags,
         ts=ts,
     )
 
 
-def threshold_outside(value, thresholds):
+def _threshold_outside(value: float, thresholds: dict) -> int:
+    """
+    This function determines a given metric "status" by comparing the IFdom value against
+    the IFdom thresholds; which are obtained from the interface transceiver details.
+    The status is encoded as (0=ok, 1=warn, 2=alert)
+
+    Parameters
+    ----------
+    value:
+        The interface DOM value is always a floating point number
+
+    thresholds:
+        The dictionary containing the threshold values
+    """
     if value <= thresholds["lowAlarm"] or value >= thresholds["highAlarm"]:
         return 2
 

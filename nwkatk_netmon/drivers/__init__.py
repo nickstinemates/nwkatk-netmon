@@ -25,7 +25,7 @@ class DriverBase(object):
         self.tags = dict()
         self.creds = None
 
-    def prepare(self, inventory_rec, config): # noqa
+    def prepare(self, inventory_rec, config):  # noqa
         self.device_host = inventory_rec.get("ipaddr") or inventory_rec["host"]
         self.private = inventory_rec.copy()
         self.tags = inventory_rec.copy()

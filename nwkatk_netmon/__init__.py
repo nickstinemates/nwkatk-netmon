@@ -17,7 +17,7 @@ from typing import Any, Mapping, Optional, Callable, List, Type
 
 from pydantic import dataclasses, PositiveInt, Field, fields, BaseModel
 
-__all__ = ["Metric", "CollectorType", "timestamp_now"]
+__all__ = ["Metric", "timestamp_now"]
 
 
 def timestamp_now():
@@ -56,21 +56,3 @@ class Metric:
 
         if isinstance(self.tags, fields.FieldInfo):
             self.tags = self.tags.default_factory()
-
-
-@dataclasses.dataclass
-class CollectorType:
-    """
-    This dataclass is used to define a collector "type" that will be used by Developers
-    so that they can implement per-device
-    """
-
-    start: Callable = Field(
-        description="The coroutine that will start the collector process (task)"
-    )
-    config: Optional[BaseModel] = Field(
-        description="collector specific configuration options"
-    )
-    metrics: List[Type[Metric]] = Field(
-        description="list of metric types supported by this collector"
-    )

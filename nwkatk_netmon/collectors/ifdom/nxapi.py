@@ -11,6 +11,10 @@
 #     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
+"""
+This file contains the Interface DOM metrics collector supporing the Cisco NXAPI
+enabled devices.
+"""
 
 # -----------------------------------------------------------------------------
 # System Imports
@@ -25,42 +29,60 @@ from functools import lru_cache
 
 from lxml.etree import Element
 
-# -----------------------------------------------------------------------------
-# Private Imports
-# -----------------------------------------------------------------------------
-
 from nwkatk_netmon.log import log
 from nwkatk_netmon import Metric, timestamp_now
 from nwkatk_netmon.collectors import CollectorExecutor, b64encodestr
 from nwkatk_netmon.drivers.nxapi import Device
 
+# -----------------------------------------------------------------------------
+# Private Imports
+# -----------------------------------------------------------------------------
 
 from nwkatk_netmon.collectors import ifdom
 
+# no exports
+
+__all__ = []
+
 
 @ifdom.register
-async def start(device: Device, starter: CollectorExecutor, config, **kwargs):  # noqa
+async def start(device: Device, executor: CollectorExecutor, config):
+    """
+    The IF DOM collector start coroutine for Cisco NX-API enabled devices.  The
+    purpose of this coroutine is to start the collector task.  Nothing fancy.
+
+    Parameters
+    ----------
+    device:
+        The device driver instance for the Cisco device
+
+    executor:
+        The netmon executor that is used to start one or more collector tasks.
+        In this instance, there is only one collector task started per device.
+
+    config:
+        The IF DOM collector config.  Currently there the IF DOM collector does
+        not provide any additional configuration options.
+    """
     log.info(f"{device.name}: Starting Cisco NXAPI Interface DOM collection")
-    starter.start(get_dom_metrics, interval=config.interval, device=device)
-
-
-_METRIC_VALUE_MAP = {
-    "voltage": ifdom.IFdomVoltageMetric,
-    "tx_pwr": ifdom.IFdomTxPowerMetric,
-    "rx_pwr": ifdom.IFdomRxPowerMetric,
-    "temperature": ifdom.IFdomTempMetric,
-}
-
-
-_METRIC_STATUS_MAP = {
-    "rx_pwr_flag": ifdom.IFdomRxPowerStatusMetric,
-    "tx_pwr_flag": ifdom.IFdomTxPowerStatusMetric,
-    "volt_flag": ifdom.IFdomVoltageStatusMetric,
-    "temp_flag": ifdom.IFdomTempStatusMetric,
-}
+    executor.start(get_dom_metrics, interval=config.interval, device=device)
 
 
 async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
+    """
+    This coroutine will be executed as a asyncio Task on a periodic basis, the
+    purpose is to collect data from the device and return the list of Interface
+    DOM metrics.
+
+    Parameters
+    ----------
+    device:
+        The Cisco device driver instance for this device.
+
+    Returns
+    -------
+    Option list of Metic items.
+    """
     timestamp = timestamp_now()
 
     log.info(f"{device.name}: Process DOM metrics ts={timestamp}")
@@ -73,7 +95,7 @@ async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
     # has a temperature value - guard against non-optical transceivers.
 
     ifs_dom_data = [
-        row_to_dict(ele)
+        _row_to_dict(ele)
         for ele in ifs_dom_res.output.xpath(
             './/ROW_interface[sfp="present" and temperature]'
         )
@@ -114,7 +136,7 @@ async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
             for nx_field, metric_cls in _METRIC_STATUS_MAP.items():
                 if metric_value := if_dom_item.get(nx_field):
                     yield metric_cls(
-                        value=from_flag_to_status(metric_value),
+                        value=_from_flag_to_status(metric_value),
                         tags=if_tags,
                         ts=timestamp,
                     )
@@ -122,13 +144,38 @@ async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
     return list(generate_metrics())
 
 
+_METRIC_VALUE_MAP = {
+    "voltage": ifdom.IFdomVoltageMetric,
+    "tx_pwr": ifdom.IFdomTxPowerMetric,
+    "rx_pwr": ifdom.IFdomRxPowerMetric,
+    "temperature": ifdom.IFdomTempMetric,
+}
+
+
+_METRIC_STATUS_MAP = {
+    "rx_pwr_flag": ifdom.IFdomRxPowerStatusMetric,
+    "tx_pwr_flag": ifdom.IFdomTxPowerStatusMetric,
+    "volt_flag": ifdom.IFdomVoltageStatusMetric,
+    "temp_flag": ifdom.IFdomTempStatusMetric,
+}
+
+
 @lru_cache
-def from_flag_to_status(flag):
+def _from_flag_to_status(flag: str) -> int:
     """
-     ++  high-alarm; +  high-warning; --  low-alarm; -  low-warning
+    The Cisco NX-OS system performs the computation to determine if a value exceeds
+    the DOM threshold.  This funciton maps the Cisco provided flag value into the
+    status value (0=ok, 1=warn, 2=alert)
+
+    Flags are:
+        ++  high-alarm
+        --  low-alarm
+        +  high-warning
+        -  low-warning
     """
     return {"++": 2, "--": 2, "+": 1, "-": 1}.get(flag.strip(), 0)
 
 
-def row_to_dict(row: Element):
+def _row_to_dict(row: Element):
+    """ helper function to convert XML elements into a dict obj. """
     return {ele.tag: ele.text for ele in row.iterchildren()}

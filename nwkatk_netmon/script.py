@@ -41,7 +41,7 @@ from nwkatk_netmon.collectors import CollectorExecutor
 VERSION = metadata.version(__package__)
 
 
-async def async_main_device(inventory_rec, config: ConfigModel):
+async def async_main_device(executor, inventory_rec, config: ConfigModel):
     interval = config.defaults.interval
 
     device_name = inventory_rec["host"]
@@ -66,15 +66,12 @@ async def async_main_device(inventory_rec, config: ConfigModel):
     # TODO: filter options to not copy all tag values
     #       ....
 
-    # Start each collector on the device
-    starter = CollectorExecutor(config=config)
-
     for c_name, c_spec in config.collectors.items():
         c_start = c_spec.collector.start
 
         c_config = c_spec.config
         c_config.interval = c_config.interval or interval
-        await c_start(device, starter=starter, config=c_config)
+        await c_start(device, executor=executor, config=c_config)
 
         # asyncio.create_task(c_start(device, interval=interval, config=config))
 
@@ -129,11 +126,14 @@ def cli_netifdom(inventory_records, config, **kwargs):
     if interval := kwargs["interval"]:
         config.defaults.interval = interval
 
+    # Start each collector on the device
+    executor = CollectorExecutor(config=config)
+
     loop = asyncio.get_event_loop()
     # loop.run_until_complete(async_main_exporters(config=config))
 
     for rec in inventory_records:
-        loop.create_task(async_main_device(rec, config=config))
+        loop.create_task(async_main_device(executor, rec, config=config))
 
     loop.run_forever()
 

@@ -72,7 +72,7 @@ class IFdomVoltageStatusMetric(Metric):
 
 
 @singledispatch
-async def ifdom_start(device, **kwargs):  # noqa
+async def ifdom_start(device, executor, **kwargs):  # noqa
     cls_name = device.__class__.__name__
     raise RuntimeError(f"IFdom: No entry-point registered for device type: {cls_name}")
 

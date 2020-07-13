@@ -27,7 +27,11 @@ from typing import Optional, List
 # -----------------------------------------------------------------------------
 
 from nwkatk_netmon import timestamp_now, Metric
-from nwkatk_netmon.collectors import CollectorExecutor, b64encodestr, CollectorConfigModel
+from nwkatk_netmon.collectors import (
+    CollectorExecutor,
+    b64encodestr,
+    CollectorConfigModel,
+)
 from nwkatk_netmon.log import log
 from nwkatk_netmon.drivers.eapi import Device
 
@@ -42,7 +46,9 @@ __all__ = []
 
 
 @ifdom.register
-async def start(device: Device, executor: CollectorExecutor, config: CollectorConfigModel):
+async def start(
+    device: Device, executor: CollectorExecutor, config: CollectorConfigModel
+):
     """
     The IF DOM collector start coroutine for Arista EOS devices.  The purpose of this
     coroutine is to start the collector task.  Nothing fancy.
@@ -131,6 +137,7 @@ async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
 #                            PRIVATE FUNCTIONS
 #
 # -----------------------------------------------------------------------------
+
 
 def _make_if_metrics(if_name: str, if_dom_data: dict, if_desc: str):
     """

@@ -92,6 +92,7 @@ class IFdomVoltageStatusMetric(Metric):
 #
 # -----------------------------------------------------------------------------
 
+
 @singledispatch
 async def ifdom_start(device, executor, **kwargs):  # noqa
     """
@@ -122,6 +123,7 @@ class IFdomCollectorSpec(CollectorType):
         use = "nwka_netmon.collectors:ifdom"
 
     """
+
     start = ifdom_start
     metrics = [
         IFdomRxPowerMetric,

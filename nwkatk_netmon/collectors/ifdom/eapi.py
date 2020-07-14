@@ -30,7 +30,6 @@ from nwkatk_netmon import timestamp_now, Metric
 from nwkatk_netmon.collectors import (
     CollectorExecutor,
     b64encodestr,
-    CollectorConfigModel,
 )
 from nwkatk_netmon.log import log
 from nwkatk_netmon.drivers.eapi import Device
@@ -47,7 +46,7 @@ __all__ = []
 
 @ifdom.register
 async def start(
-    device: Device, executor: CollectorExecutor, config: CollectorConfigModel
+    device: Device, executor: CollectorExecutor, config: ifdom.IFdomCollectorConfig
 ):
     """
     The IF DOM collector start coroutine for Arista EOS devices.  The purpose of this
@@ -67,10 +66,14 @@ async def start(
         not provide any additional configuration options.
     """
     log.info(f"{device.name}: Starting Arista EOS Interface DOM collection")
-    executor.start(get_dom_metrics, interval=config.interval, device=device)
+    executor.start(
+        get_dom_metrics, interval=config.interval, device=device, config=config
+    )
 
 
-async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
+async def get_dom_metrics(
+    device: Device, config: ifdom.IFdomCollectorConfig
+) -> Optional[List[Metric]]:
     """
     This coroutine will be executed as a asyncio Task on a periodic basis, the
     purpose is to collect data from the device and return the list of Interface
@@ -81,15 +84,16 @@ async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
     device:
         The Arisa EOS device driver instance for this device.
 
+    config:
+        The collector configuration options
+
     Returns
     -------
     Option list of Metic items.
     """
     log.debug(f"{device.name}: Getting DOM information")
-
     # Execute the required "show" commands to colelct the interface information
     # needed to produce the Metrics
-
     if_dom_res, if_desc_res = await device.eapi.exec(
         ["show interfaces transceiver detail", "show interfaces description"]
     )
@@ -115,14 +119,23 @@ async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
         if not (if_desc := ifs_desc.get(if_name)):
             return False
 
-        # do not report on interfaces that are administratively disabled.
+        # examine the interface state vs. what the collector is configured to do.
 
-        if if_desc["interfaceStatus"] == "adminDown":
+        if_status = if_desc["interfaceStatus"]
+
+        if if_status == "adminDown":
             return False
 
-        return True
+        # if the collector is configure to include interfaces even if the link
+        # is not up, then return True now.
 
-    return [
+        if config.include_linkdown:
+            return True
+
+        # otherwise only allow interface that are in the link-up condition
+        return if_status == "up"
+
+    metrics = [
         measurement
         for if_name, if_dom_data in ifs_dom.items()
         if if_dom_data and __ok_process_if(if_name)
@@ -130,6 +143,8 @@ async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
             if_name, if_dom_data, if_desc=ifs_desc[if_name]["description"]
         )
     ]
+
+    return metrics
 
 
 # -----------------------------------------------------------------------------

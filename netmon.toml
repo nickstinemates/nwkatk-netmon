@@ -57,6 +57,7 @@
 
 [collectors.ifdom]
     use = "nwka_netmon.collectors:ifdom"
+    # config.include_linkdown = false
 
 # -----------------------------------------------------------------------------
 # Exporters:

@@ -17,8 +17,9 @@ import asyncio
 import functools
 from base64 import encodebytes
 
-from pydantic import PositiveInt, BaseModel
+from pydantic import PositiveInt
 
+from nwkatk.config_model import NoExtraBaseModel
 from nwkatk_netmon import Metric
 from nwkatk_netmon.log import log
 
@@ -30,7 +31,7 @@ def b64encodestr(str_value):
     return encodebytes(bytes(str_value, encoding="utf-8")).replace(b"\n", b"")
 
 
-class CollectorConfigModel(BaseModel):
+class CollectorConfigModel(NoExtraBaseModel):
     """
     The CollectorConfigModel defines the configuraiton options that the
     collector implements.  By default they must all provide the interval option.
@@ -49,7 +50,7 @@ async def collector_start(device, executor, **kwargs):  # noqa
 
 
 class CollectorTypeMeta(type):
-    def __new__(cls, name, bases, dct):
+    def __new__(mcs, name, bases, dct):
         if "start" not in dct:
 
             @functools.singledispatch
@@ -64,7 +65,7 @@ class CollectorTypeMeta(type):
             dct["start"] = collector_start
 
         dct.setdefault("config", CollectorConfigModel)
-        return super().__new__(cls, name, bases, dct)
+        return super().__new__(mcs, name, bases, dct)
 
 
 class CollectorType(metaclass=CollectorTypeMeta):
@@ -133,12 +134,20 @@ class CollectorExecutor(object):
                 # await the original collector coroutine to return the collected
                 # metrics.
 
-                metrics = await coro(device=device, **kwargs)
-                if metrics:
-                    exporter = self.config.exporters["circonus"]
-                    asyncio.create_task(
-                        exporter.export_metrics(device=device, metrics=metrics)
+                try:
+                    metrics = await coro(device=device, **kwargs)
+
+                except Exception as exc:  # noqa
+                    log.critical(
+                        f"{device.name}: collector execution failed: {str(exc)}"
                     )
+
+                else:
+                    if metrics:
+                        exporter = self.config.exporters["circonus"]
+                        asyncio.create_task(
+                            exporter.export_metrics(device=device, metrics=metrics)
+                        )
 
                 # sleep for an interval of time and then create a new task to
                 # invoke the wrapped coroutine so that we get the effect of a

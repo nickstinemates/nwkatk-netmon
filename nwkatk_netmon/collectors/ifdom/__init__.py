@@ -17,12 +17,32 @@ This file contains the Interface Digital Optical Measurement (DOM) collection
 definition.
 
 """
-
+from typing import Optional
 from pydantic.dataclasses import dataclass
-from pydantic import conint
+from pydantic import conint, Field
 
 from nwkatk_netmon import Metric
-from nwkatk_netmon.collectors import CollectorType
+from nwkatk_netmon.collectors import CollectorType, CollectorConfigModel
+
+# -----------------------------------------------------------------------------
+#
+#                              Collector Config
+# -----------------------------------------------------------------------------
+# Define the collector configuraiton options that the User can set in their
+# configuration file.
+# -----------------------------------------------------------------------------
+
+
+class IFdomCollectorConfig(CollectorConfigModel):
+    include_linkdown: Optional[bool] = Field(
+        default=False,
+        description="""
+Controls whether or not to report on interfaces when the link is down.  When
+False (default), only interfaces that are link-up are included.  When True, all
+interfaces with optics installed will be included, even if they are link-down.
+""",
+    )
+
 
 # -----------------------------------------------------------------------------
 #
@@ -106,6 +126,8 @@ class IFdomCollector(CollectorType):
         use = "nwka_netmon.collectors:ifdom"
 
     """
+
+    config = IFdomCollectorConfig
 
     metrics = [
         IFdomRxPowerMetric,

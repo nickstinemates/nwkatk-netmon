@@ -27,14 +27,15 @@ from operator import itemgetter
 from first import first
 
 from pydantic import (
-    BaseModel,
     BaseSettings,
     Field,
-    ValidationError,  # noqa
     PositiveInt,
     validator,
     root_validator,
 )
+
+from pydantic import ValidationError  # noqa: F401
+
 
 # Private Imports
 
@@ -99,11 +100,11 @@ class CollectorModel(NoExtraBaseModel):
         return PackagedEntryPoint.validate(val)
 
     @validator("collector", pre=True, always=True)
-    def _from_collector_to_callable(cls, val, values):
+    def _from_collector_to_callable(cls, val, values, **kwargs):
         return EntryPointImportPath.validate(val) if val else values["use"]
 
     @validator("config", pre=True, always=True)
-    def _xform_config_to_obj(cls, val, values):
+    def _config_dict_to_obj(cls, val, values):
         return values["collector"].config.parse_obj(val or {})
 
 

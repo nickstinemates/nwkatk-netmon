@@ -24,7 +24,7 @@ from itertools import chain
 
 import httpx
 from tenacity import retry, wait_exponential
-from pydantic import BaseModel, AnyHttpUrl, validator
+from pydantic import BaseModel, AnyHttpUrl, validator, ValidationError
 
 from nwkatk.config_model import EnvSecretStr
 
@@ -38,8 +38,24 @@ from nwkatk_netmon.drivers import DriverBase
 from nwkatk_netmon.exporters import ExporterBase
 
 
+class _ValidateAnyHttpUrl(BaseModel):
+    url: AnyHttpUrl
+
+
 class CirconusConfigModel(BaseModel):
     circonus_datasubmission_url: EnvSecretStr
+
+    @validator("circonus_datasubmission_url")
+    def _ensure_url(cls, val):
+        plain_text = val.get_secret_value()
+
+        try:
+            _ValidateAnyHttpUrl(url=plain_text)
+        except ValidationError as exc:
+            errmsg = exc.errors()[0]["msg"]
+            raise ValueError(f"{errmsg}: {plain_text}")
+
+        return val
 
 
 class CirconusExporter(ExporterBase):

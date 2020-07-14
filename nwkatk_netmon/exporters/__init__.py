@@ -13,7 +13,7 @@
 #  limitations under the License.
 
 from typing import Optional, List
-from nwkatk.config_model import Credential, BaseModel
+from nwkatk.config_model import BaseModel
 
 from nwkatk_netmon.drivers import DriverBase
 from nwkatk_netmon import Metric
@@ -29,10 +29,7 @@ class ExporterBase(object):
         self.creds = None
 
     def prepare(self, config):
-        pass
-
-    async def login(self, creds: Optional[Credential] = None) -> bool:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     async def export_metrics(self, device: DriverBase, metrics: List[Metric]):
         pass

@@ -13,6 +13,7 @@
 #     limitations under the License.
 
 from setuptools import setup, find_packages
+from itertools import chain
 
 package_name = "nwkatk_netmon"
 package_version = open("VERSION").read().strip()
@@ -25,6 +26,16 @@ def requirements(filename="requirements.txt"):
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+# builtin extras to support Cisco NX-API and Arista EOS device driver.
+
+extras_require = {
+    "nxapi": requirements("requirements-nxapi.txt"),
+    "eapi": requirements("requirements-eapi.txt"),
+}
+
+# add the option for all optional extras
+extras_require["all"] = list(chain.from_iterable(extras_require.values()))
+
 
 setup(
     name=package_name,
@@ -36,26 +47,20 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=requirements(),
+    extras_require=extras_require,
     entry_points={
-        'console_scripts': [
-            "nwka-netmon = nwkatk_netmon.script:main"
-        ],
-        'nwka_netmon.device_drivers': [
+        "console_scripts": ["nwka-netmon = nwkatk_netmon.script:main"],
+        "nwka_netmon.device_drivers": [
             "cisco.nxapi = nwkatk_netmon.drivers.nxapi:Device",
-            "arista.eos = nwkatk_netmon.drivers.eapi:Device"
+            "arista.eos = nwkatk_netmon.drivers.eapi:Device",
         ],
-        'nwka_netmon.collectors': [
-            "ifdom = nwkatk_netmon.collectors.ifdom:IFdomCollectorSpec"
+        "nwka_netmon.collectors": [
+            "ifdom = nwkatk_netmon.collectors.ifdom:IFdomCollector"
         ],
-        'nwka_netmon.exporters': [
+        "nwka_netmon.exporters": [
             "circonus = nwkatk_netmon.exporters.circonus:CirconusExporter"
         ],
     },
-    dependency_links=[
-        'git+https://github.com/jeremyschulman/nwkatk-runner.git#egg=nwkatk',
-        'git+https://github.com/jeremyschulman/aio-nxapi.git#egg=aio-nxapi',
-        'git+https://github.com/jeremyschulman/aio-eapi.git#egg=aio-eapi'
-    ],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

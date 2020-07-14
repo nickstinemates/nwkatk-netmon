@@ -8,7 +8,7 @@ time-series database so that I can then use this data in monitoring and
 reporting applications such as Grafana.
 
 A _*metric*_ is any data item that can be represented as a number or string
-value.  A common example of a metric is a interface transmit-byte counter. 
+value.  A common example of a metric is a interface transmit-byte counter.
 Another example is the status of a BGP neighbor interface, a value that could be
 stored as a string such as "established", or stored as a number to represent
 that state.  As the Developer of the monitoring application, you have the choice

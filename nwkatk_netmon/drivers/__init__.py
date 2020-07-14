@@ -31,7 +31,7 @@ class DriverBase(object):
         self.tags = inventory_rec.copy()
 
     async def login(self, creds: Optional[Credential] = None) -> bool:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def __str__(self):
         return self.name

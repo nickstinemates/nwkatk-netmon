@@ -13,9 +13,9 @@
 #     limitations under the License.
 
 import time
-from typing import Any, Mapping, Optional, Callable, List, Type
+from typing import Any, Mapping
 
-from pydantic import dataclasses, PositiveInt, Field, fields, BaseModel
+from pydantic import dataclasses, PositiveInt, Field, fields
 
 __all__ = ["Metric", "timestamp_now"]
 

@@ -18,7 +18,6 @@ definition.
 
 """
 
-from functools import singledispatch
 from pydantic.dataclasses import dataclass
 from pydantic import conint
 
@@ -93,23 +92,7 @@ class IFdomVoltageStatusMetric(Metric):
 # -----------------------------------------------------------------------------
 
 
-@singledispatch
-async def ifdom_start(device, executor, **kwargs):  # noqa
-    """
-    Using a "singledispatch" method for driver-specific registration purposes. A
-    specific device driver collector package will use this function as a
-    decorator to register their specific Driver class.  See the eapi.py and
-    nxapi.py files to see how this is used.
-
-    In the event that the system attempts to start collecting on an unsupported
-    (unregistered) Device class the body of this function will be called; which
-    will raise a RuntimeError.
-    """
-    cls_name = device.__class__.__name__
-    raise RuntimeError(f"IFdom: No entry-point registered for device type: {cls_name}")
-
-
-class IFdomCollectorSpec(CollectorType):
+class IFdomCollector(CollectorType):
     """
     This class defines the Interface DOM Collector specification.  This class is
     "registered" with the "nwka_netmon.collectors" entry_point group via the
@@ -124,7 +107,6 @@ class IFdomCollectorSpec(CollectorType):
 
     """
 
-    start = ifdom_start
     metrics = [
         IFdomRxPowerMetric,
         IFdomRxPowerStatusMetric,
@@ -140,4 +122,4 @@ class IFdomCollectorSpec(CollectorType):
 # create an "alias" variable so that the device specific collector packages
 # can register their start functions.
 
-register = IFdomCollectorSpec.start.register
+register = IFdomCollector.start.register

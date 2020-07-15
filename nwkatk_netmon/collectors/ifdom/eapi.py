@@ -175,7 +175,7 @@ def _make_if_metrics(if_name: str, if_dom_data: dict, if_desc: str):
 
     c_tags = {
         "if_name": if_name,
-        "if_desc": if_desc,
+        "if_desc": if_desc or "MISSING-DESCRIPTION",
         "media": if_dom_data["mediaType"],
     }
 

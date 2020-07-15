@@ -1,19 +1,20 @@
-#     Copyright 2020, Jeremy Schulman
+# Copyright 2020, Jeremy Schulman
 #
-#     Licensed under the Apache License, Version 2.0 (the "License");
-#     you may not use this file except in compliance with the License.
-#     You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-#     Unless required by applicable law or agreed to in writing, software
-#     distributed under the License is distributed on an "AS IS" BASIS,
-#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#     See the License for the specific language governing permissions and
-#     limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
-This file contains the Interface DOM metrics collector supporing the Cisco NXAPI
-enabled devices.
+Collector: Interface Optic Monitoring
+Device: Cisco NX-OS via NXAPI
 """
 
 # -----------------------------------------------------------------------------
@@ -30,7 +31,7 @@ from functools import lru_cache
 from lxml.etree import Element
 
 from nwkatk_netmon.log import log
-from nwkatk_netmon import Metric, timestamp_now, b64encodestr
+from nwkatk_netmon import Metric, timestamp_now
 from nwkatk_netmon.collectors import CollectorExecutor
 from nwkatk_netmon.drivers.nxapi import Device
 
@@ -40,9 +41,17 @@ from nwkatk_netmon.drivers.nxapi import Device
 
 from nwkatk_netmon.collectors import ifdom
 
-# no exports
+# -----------------------------------------------------------------------------
+# Exports (none)
+# -----------------------------------------------------------------------------
 
 __all__ = []
+
+# -----------------------------------------------------------------------------
+#
+#                                   CODE BEGINS
+#
+# -----------------------------------------------------------------------------
 
 
 @ifdom.register
@@ -65,10 +74,14 @@ async def start(device: Device, executor: CollectorExecutor, config):
         not provide any additional configuration options.
     """
     log.info(f"{device.name}: Starting Cisco NXAPI Interface DOM collection")
-    executor.start(get_dom_metrics, interval=config.interval, device=device)
+    executor.start(
+        get_dom_metrics, interval=config.interval, device=device, config=config
+    )
 
 
-async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
+async def get_dom_metrics(
+    device: Device, config: ifdom.IFdomCollectorConfig
+) -> Optional[List[Metric]]:
     """
     This coroutine will be executed as a asyncio Task on a periodic basis, the
     purpose is to collect data from the device and return the list of Interface
@@ -78,6 +91,9 @@ async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
     ----------
     device:
         The Cisco device driver instance for this device.
+
+    config:
+        The collector configuration options
 
     Returns
     -------
@@ -101,6 +117,18 @@ async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
         )
     ]
 
+    def _allow_interface(if_status):
+        if if_status == "disabled":
+            # if administratively disabled skip this interface
+            return False
+
+        if config.include_linkdown:
+            # if the collector config allows link-down interfaces,
+            # then return True now
+            return True
+
+        return if_status == "connected"
+
     # noinspection PyArgumentList
     def generate_metrics():
 
@@ -109,24 +137,28 @@ async def get_dom_metrics(device: Device) -> Optional[List[Metric]]:
 
             # for the given interface, if it not in a connected state (up), then do not report
 
-            if_status = ifs_status_res.output.xpath(
-                f'TABLE_interface/ROW_interface[interface="{if_name}" and state!="disabled"]'
-            )
+            # if_status = ifs_status_res.output.xpath(
+            #     f'TABLE_interface/ROW_interface[interface="{if_name}" and state!="disabled"]'
+            # )
 
-            if not len(if_status):
+            if_status = ifs_status_res.output.xpath(
+                f'TABLE_interface/ROW_interface[interface="{if_name}"]'
+            )[0]
+
+            if not _allow_interface(if_status.findtext("state")):
                 continue
 
             # obtain the interface description value; handle case if there is none configured.
 
-            if_desc = (if_status[0].findtext("name") or "").strip()
+            if_desc = (if_status.findtext("name") or "").strip()
             if_media = (if_dom_item["type"] or if_dom_item["partnum"]).strip()
 
             # all of the metrics will share the same interface tags
 
             if_tags = {
                 "if_name": if_name,
-                "if_desc": b64encodestr(if_desc),
-                "media": b64encodestr(if_media),
+                "if_desc": if_desc,
+                "media": if_media,
             }
 
             for nx_field, metric_cls in _METRIC_VALUE_MAP.items():

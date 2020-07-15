@@ -1,22 +1,23 @@
-#     Copyright 2020, Jeremy Schulman
+#  Copyright 2020, Jeremy Schulman
 #
-#     Licensed under the Apache License, Version 2.0 (the "License");
-#     you may not use this file except in compliance with the License.
-#     You may obtain a copy of the License at
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
-#     Unless required by applicable law or agreed to in writing, software
-#     distributed under the License is distributed on an "AS IS" BASIS,
-#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#     See the License for the specific language governing permissions and
-#     limitations under the License.
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 # -----------------------------------------------------------------------------
 # System Imports
 # -----------------------------------------------------------------------------
 
 from itertools import chain
+import re
 
 # -----------------------------------------------------------------------------
 # Public Imports
@@ -36,6 +37,12 @@ from nwkatk_netmon import Metric
 from nwkatk_netmon.log import log
 from nwkatk_netmon.drivers import DriverBase
 from nwkatk_netmon.exporters import ExporterBase
+
+# -----------------------------------------------------------------------------
+# Exports
+# -----------------------------------------------------------------------------
+
+__all__ = []
 
 
 class InfluxDBConfigModel(NoExtraBaseModel):
@@ -58,10 +65,10 @@ class InfluxDBExporter(ExporterBase):
         self.httpx = httpx.AsyncClient(verify=False)
 
     async def export_metrics(self, device: DriverBase, metrics):
-        log.debug(f"{device.name}: Exporting {len(metrics)} metrics")
+        log.debug(f"{device.name}: exporting {len(metrics)} metrics to InfluxDB")
 
         metrics_data = "\n".join(
-            make_influxdb_metric(device_tags=device.tags, metric=metric)
+            _make_influxdb_metric(device_tags=device.tags, metric=metric)
             for metric in metrics
         )
 
@@ -75,11 +82,11 @@ class InfluxDBExporter(ExporterBase):
                 return
 
             if 400 <= res.status_code < 500:
-                errmsg = f"InfluxDB bad request, skipping: {res.json()}"
+                errmsg = f"{device.name}: InfluxDB bad request, skipping: {res.json()}"
                 log.error(errmsg)
 
             if 500 <= res.status_code < 600:
-                errmsg = f"InfluxDB unavailable: {res.json()}"
+                errmsg = f"{device.name}: InfluxDB unavailable: {res.json()}"
                 log.error(errmsg)
                 raise RuntimeError(errmsg)
 
@@ -88,10 +95,19 @@ class InfluxDBExporter(ExporterBase):
 
         except Exception as exc:  # noqa
             exc_name = exc.__class__.__name__
-            log.error(f"{device.name}: Unable to send metrics to Circonus: {exc_name}")
+            log.critical(
+                f"{device.name}: Unable to send metrics to InfluxDB: {exc_name}"
+            )
 
 
-def make_influxdb_metric(device_tags, metric: Metric) -> str:
+_re_escape_chars = re.compile(r"[\s,=]").sub
+
+
+def _escape_tag_value(value):
+    return _re_escape_chars(lambda mo: f"\\{mo.group()}", value)
+
+
+def _make_influxdb_metric(device_tags, metric: Metric) -> str:
     all_tags = chain(device_tags.items(), metric.tags.items())
-    labels = ",".join(f"{tag}={value}" for tag, value in all_tags)
+    labels = ",".join(f"{tag}={_escape_tag_value(value)}" for tag, value in all_tags)
     return f"{metric.name},{labels} value={metric.value} {metric.ts * 1_000_000}"

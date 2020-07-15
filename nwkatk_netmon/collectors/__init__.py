@@ -12,23 +12,24 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from typing import Optional, List, Type
+from typing import Optional, List, Type, TYPE_CHECKING
 import asyncio
 import functools
-from base64 import encodebytes
 
+
+from first import first
 from pydantic import PositiveInt
 
 from nwkatk.config_model import NoExtraBaseModel
 from nwkatk_netmon import Metric
 from nwkatk_netmon.log import log
+from nwkatk_netmon.exporters import ExporterBase
+
+if TYPE_CHECKING:
+    from nwkatk_netmon.config_model import ConfigModel
 
 
-__all__ = ["CollectorType", "CollectorConfigModel", "CollectorExecutor", "b64encodestr"]
-
-
-def b64encodestr(str_value):
-    return encodebytes(bytes(str_value, encoding="utf-8")).replace(b"\n", b"")
+__all__ = ["CollectorType", "CollectorConfigModel", "CollectorExecutor"]
 
 
 class CollectorConfigModel(NoExtraBaseModel):
@@ -104,7 +105,11 @@ class CollectorType(metaclass=CollectorTypeMeta):
 
 class CollectorExecutor(object):
     def __init__(self, config):
-        self.config = config
+        self.config: ConfigModel = config
+        exporter_name = first(self.config.defaults.exporters) or first(
+            self.config.exporters.keys()
+        )
+        self.exporter: ExporterBase = self.config.exporters[exporter_name]
 
     def start(self, coro, interval, device, **kwargs):
         ic = self.interval_executor(interval)(coro)
@@ -144,9 +149,8 @@ class CollectorExecutor(object):
 
                 else:
                     if metrics:
-                        exporter = self.config.exporters["circonus"]
                         asyncio.create_task(
-                            exporter.export_metrics(device=device, metrics=metrics)
+                            self.exporter.export_metrics(device=device, metrics=metrics)
                         )
 
                 # sleep for an interval of time and then create a new task to

@@ -27,10 +27,7 @@ from typing import Optional, List
 # -----------------------------------------------------------------------------
 
 from nwkatk_netmon import timestamp_now, Metric
-from nwkatk_netmon.collectors import (
-    CollectorExecutor,
-    b64encodestr,
-)
+from nwkatk_netmon.collectors import CollectorExecutor
 from nwkatk_netmon.log import log
 from nwkatk_netmon.drivers.eapi import Device
 
@@ -178,8 +175,8 @@ def _make_if_metrics(if_name: str, if_dom_data: dict, if_desc: str):
 
     c_tags = {
         "if_name": if_name,
-        "if_desc": b64encodestr(if_desc),
-        "media": b64encodestr(if_dom_data["mediaType"]),
+        "if_desc": if_desc,
+        "media": if_dom_data["mediaType"],
     }
 
     m_txpow = ifdom.IFdomTxPowerMetric(value=if_dom_data["txPower"], tags=c_tags, ts=ts)

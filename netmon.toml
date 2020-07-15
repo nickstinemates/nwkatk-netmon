@@ -27,7 +27,7 @@
     # exporters and then use the `exporters` option to idntify the _one_
     # exporter to use.
 
-    exporters = ["circonus"]
+    exporters = ["influxdb"]
 
 # -----------------------------------------------------------------------------
 # Collectors:
@@ -76,6 +76,12 @@
 [exporters.circonus]
     use = "nwka_netmon.exporters:circonus"
     config.circonus_datasubmission_url = "$CIRCONUS_URL"
+
+
+[exporters.influxdb]
+    use = "nwka_netmon.exporters:influxdb"
+    config.server_url = "$INFLUXDB_SERVER"
+    config.database = "db0"
 
 # -----------------------------------------------------------------------------
 # Device Drivers:

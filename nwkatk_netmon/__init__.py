@@ -12,16 +12,23 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
-import time
 from typing import Any, Mapping
+import time
+from base64 import encodebytes
+
 
 from pydantic import dataclasses, PositiveInt, Field, fields
 
-__all__ = ["Metric", "timestamp_now"]
+__all__ = ["Metric", "timestamp_now", "b64encodestr"]
 
 
 def timestamp_now():
+    """ returns the current time since epoch in milli-seconds """
     return int(time.time() * 1000)
+
+
+def b64encodestr(str_value):
+    return encodebytes(bytes(str_value, encoding="utf-8")).replace(b"\n", b"")
 
 
 @dataclasses.dataclass

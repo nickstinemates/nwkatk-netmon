@@ -58,7 +58,8 @@ setup(
             "ifdom = nwkatk_netmon.collectors.ifdom:IFdomCollector"
         ],
         "nwka_netmon.exporters": [
-            "circonus = nwkatk_netmon.exporters.circonus:CirconusExporter"
+            "circonus = nwkatk_netmon.exporters.circonus:CirconusExporter",
+            "influxdb = nwkatk_netmon.exporters.influxdb:InfluxDBExporter",
         ],
     },
     classifiers=[

@@ -30,8 +30,8 @@ from functools import lru_cache
 from lxml.etree import Element
 
 from nwkatk_netmon.log import log
-from nwkatk_netmon import Metric, timestamp_now
-from nwkatk_netmon.collectors import CollectorExecutor, b64encodestr
+from nwkatk_netmon import Metric, timestamp_now, b64encodestr
+from nwkatk_netmon.collectors import CollectorExecutor
 from nwkatk_netmon.drivers.nxapi import Device
 
 # -----------------------------------------------------------------------------

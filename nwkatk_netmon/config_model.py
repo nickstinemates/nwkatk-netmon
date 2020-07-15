@@ -17,7 +17,7 @@
 # -----------------------------------------------------------------------------
 
 
-from typing import Dict, Callable, Optional, List, Type
+from typing import Dict, Optional, List, Type
 from operator import itemgetter
 
 # -----------------------------------------------------------------------------
@@ -54,6 +54,7 @@ from nwkatk.config_model import (
 
 from nwkatk_netmon.collectors import CollectorType, CollectorConfigModel
 from nwkatk_netmon.drivers import DriverBase
+from nwkatk_netmon.exporters import ExporterBase
 
 
 class DefaultCredential(Credential, BaseSettings):
@@ -109,8 +110,8 @@ class CollectorModel(NoExtraBaseModel):
 
 
 class ExporterModel(NoExtraBaseModel):
-    exporter: Optional[Type]
-    use: Optional[Callable]
+    exporter: Optional[Type[ExporterBase]]
+    use: Optional[Type[ExporterBase]]
     config: Optional[Dict]
 
     @validator("use", pre=True)
@@ -119,9 +120,11 @@ class ExporterModel(NoExtraBaseModel):
 
     @root_validator
     def normalize_exporter(cls, values):
-        start = values["exporter"] = first(itemgetter("exporter", "use")(values))
-        if not start:
+        try:
+            values["exporter"] = first(itemgetter("exporter", "use")(values))
+        except KeyError:
             raise ValueError("Missing one of ['exporter', 'use']")
+
         return values
 
 

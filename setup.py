@@ -1,16 +1,16 @@
-#     Copyright 2020, Jeremy Schulman
+# Copyright 2020, Jeremy Schulman
 #
-#     Licensed under the Apache License, Version 2.0 (the "License");
-#     you may not use this file except in compliance with the License.
-#     You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#         http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-#     Unless required by applicable law or agreed to in writing, software
-#     distributed under the License is distributed on an "AS IS" BASIS,
-#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#     See the License for the specific language governing permissions and
-#     limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from setuptools import setup, find_packages
 from itertools import chain
@@ -26,16 +26,29 @@ def requirements(filename="requirements.txt"):
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+# -----------------------------------------------------------------------------
+#
+#                           Extras Requirements
+#
+# -----------------------------------------------------------------------------
+
 # builtin extras to support Cisco NX-API and Arista EOS device driver.
 
 extras_require = {
-    "nxapi": requirements("requirements-nxapi.txt"),
-    "eapi": requirements("requirements-eapi.txt"),
+    "nxapi": requirements("requirements-drivers-nxapi.txt"),
+    "eapi": requirements("requirements-drivers-eapi.txt"),
+    "ios": requirements("requirements-drivers-ssh.txt"),
 }
 
 # add the option for all optional extras
 extras_require["all"] = list(chain.from_iterable(extras_require.values()))
 
+
+# -----------------------------------------------------------------------------
+#
+#                                 Main Setup
+#
+# -----------------------------------------------------------------------------
 
 setup(
     name=package_name,

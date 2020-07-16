@@ -109,4 +109,4 @@
 
 [device_drivers.ios]
     use = "nwka_netmon.device_drivers:cisco.ios_ssh"
-    # modules = ["nwkatk_netmon.collectors.ifdom.eapi"]
+    modules = ["nwkatk_netmon.collectors.ifdom.ios_ssh"]

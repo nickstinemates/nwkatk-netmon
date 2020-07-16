@@ -65,6 +65,7 @@ setup(
         "console_scripts": ["nwka-netmon = nwkatk_netmon.script:main"],
         "nwka_netmon.device_drivers": [
             "cisco.nxapi = nwkatk_netmon.drivers.nxapi:Device",
+            "cisco.ios_ssh = nwkatk_netmon.drivers.ios_ssh:Device",
             "arista.eos = nwkatk_netmon.drivers.eapi:Device",
         ],
         "nwka_netmon.collectors": [
